@@ -47,8 +47,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 - [x] Phase 0: 원본 분석, 커버리지 조사
 - [x] Phase 1: 픽셀→폴리곤 변환 엔진 + PoC (전수 12,354자 픽셀-정확 일치 0 mismatch)
-- [ ] Phase 2: 전체 글리프 UFO 빌드
-- [ ] Phase 3: 메타데이터/테이블 현대화 (name, OS/2, 레거시 비트맵 제거 등)
+- [x] Phase 2: 전체 글리프 UFO 빌드 → TTF/OTF 컴파일, 빌드된 폰트 전수 픽셀-정확 검증
+      (`scripts/verify_ttf.py`, 힌팅 off에서 0 mismatch)
+- [ ] Phase 3: 메타데이터/테이블 현대화 (name, OS/2, gasp/head.flags로 그리드핏 억제, 레거시 비트맵 제거 등)
 - [ ] Phase 4: 검증 (fontbakery, 렌더)
 - [ ] Phase 5: 선택 글리프 수작업 리드로잉
 

@@ -56,8 +56,9 @@ def build(chars=None, all_glyphs=False):
     if "space" in strike or True:
         _add_space(ufo, cmap)
 
+    added = 0
     for gname in wanted:
-        if gname in ("space",):
+        if gname in (".notdef", "space") or gname in ufo:
             continue
         if gname not in strike:
             continue
@@ -71,6 +72,9 @@ def build(chars=None, all_glyphs=False):
         contours = pf.pixels_to_contours(width_px, rows)
         _draw(glyph, contours)
         ufo.addGlyph(glyph)
+        added += 1
+        if all_glyphs and added % 2000 == 0:
+            print(f"  ...{added} glyphs", flush=True)
 
     return ufo
 
