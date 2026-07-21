@@ -16,6 +16,7 @@ sys.path.insert(0, "tools")
 import pixelfont as pf
 import spacing as sp
 import metadata as md
+import customglyphs as cg
 
 UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
@@ -59,6 +60,8 @@ def build(chars=None, all_glyphs=False, proportional=False):
             continue
         width_px, rows = strike[gname]
         cp = rev.get(gname)
+        if cp in cg.GLYPHS:                    # hand-drawn override
+            width_px, rows = cg.GLYPHS[cp]
         if proportional:
             adv_px, shift_px = sp.proportional(width_px, rows, cp)
         else:
