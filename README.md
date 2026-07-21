@@ -1,59 +1,67 @@
-# HANKBC Restored
+# 도깨비DNR 고딕 / Dokkaebi DNR Gothic
 
-프린세스 메이커 2 도스 한글판에서 쓰인 16×16 비트맵 글꼴 **HANKBC**를,
-픽셀(계단) 모양을 그대로 보존하는 현대 벡터(TrueType/OpenType) 폰트로 복원하는 프로젝트.
+**도깨비 디나루** 16×16 비트맵 글꼴을 출발점으로, 픽셀(계단) 미학을 그대로 보존한
+**비례폭 픽셀 파생 서체**. 자동 변환된 픽셀-정확 벡터 베이스 위에서 글자 다듬기·커버리지
+확장·자폭 재설계를 진행한다.
 
-## 원본 정보
+> 이름에 대하여: "도깨비 디나루"(원본)와 "도깨비 고딕체"(역사적 별개 글꼴), 그리고 기존
+> 복원본 "Dokkaebi Dinaru"(Juwan Park)와 혼동을 피하기 위해 `DNR`(디나루의 자음) 마커를
+> 넣고 실제 장르(고딕)를 명시했다. 자세한 출처·계보는 [docs/PROVENANCE.md](docs/PROVENANCE.md).
 
-- 원본: `original/HANKBC.ttf` — 16×16 1비트 임베디드 비트맵 폰트 (EBDT/EBLC + 레거시 bdat/bloc)
-- name 레코드: `BIG.ENG + HANKBC.HAN + SMD.KSG → HANKBC-ISO10646-1.TTF`
-  (영문·한글·기호 도스 비트맵 3종을 유니코드로 재조립한 것)
-- 커버리지: 현대 한글 완성형 11,172자 완비 + 가나/키릴/그리스/라틴/기호, **한자 없음**, 총 12,354 글리프
-- 폭: ASCII 8px(512 units) 반각 / 한글 등 16px(1024 units) 전각
-- upem 1024 → 1픽셀 = 정확히 64 units
+## 성격
 
-## 복원 방식
+- 원본: `도깨비 디나루` (파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
+- 커버리지(현재): 현대 한글 완성형 11,172자 + 라틴·가나·키릴·그리스·기호, 한자 없음
+- upem 1024 → 1픽셀 = 64 units. 라틴/기호는 비례폭, 한글은 전각
+- 라이선스: **SIL Open Font License 1.1** (예약 글꼴 이름 `Dokkaebi DNR`) — [OFL.txt](OFL.txt)
 
-"켜진 픽셀 = 64×64 정사각형". 인접 픽셀의 공유 변을 상쇄(edge-cancellation)해
-병합 폴리곤을 만들고, 카운터(구멍)는 반대 winding으로 자동 분리 → non-zero 채우기로 항상 정확.
-곡선 트레이싱을 쓰지 않으므로 아무리 키워도 계단이 100% 보존됨.
+## 복원·파생 방식
+
+"켜진 픽셀 = 64×64 정사각형". 인접 픽셀의 공유 변을 상쇄(edge-cancellation)해 병합 폴리곤을
+만들고, 카운터(구멍)는 반대 winding으로 자동 분리 → non-zero 채우기로 항상 정확. 곡선 트레이싱을
+쓰지 않으므로 아무리 키워도 계단이 100% 보존된다. 비례폭은 각 글자의 잉크 범위에서 자동 산출.
 
 ## 파이프라인
 
 ```
-original/HANKBC.ttf  ──(tools/pixelfont.py)──▶  merged rectilinear contours
-                     ──(scripts/build_ufo.py)─▶  build/HANKBC.ufo   ◀── 수작업 수정
-                     ──(fontmake)────────────▶  build/HANKBC.ttf / .otf
-                     ──(scripts/poc_verify.py)▶  픽셀 단위 회귀 검증
+original/HANKBC.ttf
+  └ tools/pixelfont.py   픽셀→병합 폴리곤 (픽셀-정확)
+  └ tools/spacing.py     잉크 기준 비례폭 산출
+  └ tools/metadata.py    이름/OS2/gasp 등 메타데이터
+  └ scripts/build_ufo.py → build/DokkaebiDNRGothic.ufo  ◀── 수작업 리드로잉
+  └ fontmake             → .ttf / .otf
+  └ scripts/finalize.py  한국어 로컬라이즈 이름 추가
+  └ scripts/verify_ttf.py       픽셀-정확 회귀 검증
+  └ scripts/coverage_report.py  빠진 흔한 문자 리포트
 ```
 
-## 사용법
+## 빌드
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-# 지오메트리 픽셀-정확성 전수 검증
-.venv/bin/python scripts/poc_verify.py
+.venv/bin/python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic.ufo
+.venv/bin/fontmake -u build/DokkaebiDNRGothic.ufo -o ttf otf --output-dir build/
+.venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic.ttf build/DokkaebiDNRGothic.otf
 
-# UFO 빌드 (서브셋 PoC / 전체)
-.venv/bin/python scripts/build_ufo.py --out build/HANKBC-PoC.ufo
-.venv/bin/python scripts/build_ufo.py --all --out build/HANKBC.ufo
-
-# 컴파일
-.venv/bin/fontmake -u build/HANKBC.ufo -o ttf --output-path build/HANKBC.ttf
+# 검증 / 리포트
+.venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic.ttf
+.venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic.ttf
 ```
 
-## 상태
+## 진행 상태
 
-- [x] Phase 0: 원본 분석, 커버리지 조사
-- [x] Phase 1: 픽셀→폴리곤 변환 엔진 + PoC (전수 12,354자 픽셀-정확 일치 0 mismatch)
-- [x] Phase 2: 전체 글리프 UFO 빌드 → TTF/OTF 컴파일, 빌드된 폰트 전수 픽셀-정확 검증
-      (`scripts/verify_ttf.py`, 힌팅 off에서 0 mismatch)
-- [ ] Phase 3: 메타데이터/테이블 현대화 (name, OS/2, gasp/head.flags로 그리드핏 억제, 레거시 비트맵 제거 등)
-- [ ] Phase 4: 검증 (fontbakery, 렌더)
-- [ ] Phase 5: 선택 글리프 수작업 리드로잉
+- [x] Phase 0: 원본 분석·커버리지 조사
+- [x] Phase 1: 픽셀→폴리곤 변환 엔진 (전수 12,354자 픽셀-정확, 0 mismatch)
+- [x] Phase 2: 전체 빌드 + 빌드 폰트 픽셀-정확 검증
+- [x] 방향 전환: 충실 복원본이 이미 존재 → **파생·리디자인**으로
+- [x] Phase 3: 메타데이터·OFL·gasp 그리드핏 억제, 비례폭 적용, 이름 확정
+- [ ] 리디자인 ①: 글자 다듬기 (개별 글리프 수작업)
+- [ ] 리디자인 ②: 커버리지 확장 (예: ₩ · — · © 등, `coverage_report.py` 참고)
+- [ ] 리디자인 ③: 자폭/간격 미세 조정
+- [ ] 최종 검증(fontbakery) · 배포
 
-## 라이선스
+## 참고
 
-원작자 미상(HANKBC, 프린세스 메이커 2 도스 한글판에서 추출). 배포 라이선스 미정(SIL OFL 1.1 검토 중).
-한국 판례상 글자체 도안 자체는 저작권 보호 대상이 아니며, 본 프로젝트는 비트맵을 새 벡터로 재작성함.
+- 출처·라이선스 조사: [docs/PROVENANCE.md](docs/PROVENANCE.md)
+- 1차 사료: [article.txt](article.txt) (김윤수 「글꼴 모음 #002」, 1994)

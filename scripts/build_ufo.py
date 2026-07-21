@@ -15,6 +15,7 @@ from ufoLib2.objects import Glyph
 sys.path.insert(0, "tools")
 import pixelfont as pf
 import spacing as sp
+import metadata as md
 
 UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
@@ -31,16 +32,9 @@ def build(chars=None, all_glyphs=False, proportional=False):
         rev.setdefault(gname, cp)
 
     ufo = ufoLib2.Font()
-    info = ufo.info
-    info.familyName = "HANKBC Restored"
-    info.styleName = "Regular"
-    info.unitsPerEm = UPEM
-    info.ascender = ASCENDER
-    info.descender = DESCENDER
-    info.capHeight = CAP
-    info.xHeight = 7 * pf.PX
-    info.versionMajor = 0
-    info.versionMinor = 1
+    ufo.info.unitsPerEm = UPEM
+    md.apply(ufo, ascender=ASCENDER, descender=DESCENDER,
+             cap_height=11 * pf.PX, x_height=7 * pf.PX)
 
     # decide glyph set
     if all_glyphs:
