@@ -40,6 +40,16 @@
   .kbd { font-family: var(--mono); font-size: 11px; background: var(--faint);
     padding: 1px 5px; border-radius: 4px; color: var(--ink); }
 
+  .weight-tabs { max-width: 1080px; margin: 14px auto 18px; display: flex; gap: 8px; }
+  .wtab { flex: 1; font: inherit; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid var(--grid-line); background: var(--panel); color: var(--muted);
+    cursor: pointer; text-align: left; font-weight: 600; font-size: 14px; }
+  .wtab-note { display: block; font-weight: 400; font-size: 11px; margin-top: 2px;
+    color: var(--muted); }
+  .wtab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft);
+    color: var(--ink); }
+  .wtab[aria-selected="true"] .wtab-note { color: var(--accent); }
+
   .tier { max-width: 1080px; margin: 16px auto 0; }
   .tier:first-of-type { margin-top: 0; }
 
@@ -120,6 +130,9 @@
     width: auto; height: auto; }
 
   .palette-group + .palette-group { margin-top: 16px; }
+  .weight-only[data-weight="light"] { display: none; }
+  :root[data-active-weight="light"] .weight-only[data-weight="regular"] { display: none; }
+  :root[data-active-weight="light"] .weight-only[data-weight="light"] { display: block; }
   .sublabel { font-size: 11px; color: var(--muted); margin: 0 0 8px; letter-spacing: 0.03em; }
   .hint-inline { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
 
@@ -173,6 +186,11 @@
       title="지금까지 저장된 모든 글자를 한 번에 컴파일합니다. 편집 중인 미저장 글자는 포함되지 않습니다. 빌드 로그는 브라우저 콘솔에 출력됩니다.">빌드</button>
   </header>
 
+  <div class="weight-tabs" role="tablist" aria-label="웨이트">
+    <button class="wtab" data-weight="regular" role="tab" aria-selected="true">Regular <span class="wtab-note">라틴 · 2px</span></button>
+    <button class="wtab" data-weight="light" role="tab" aria-selected="false">Light <span class="wtab-note">한글 조합형 · 1px</span></button>
+  </div>
+
   <!-- 1. 글자 그리기: 캔버스 · 1×/2×/3× 미리보기 · 내보내기 -->
   <section class="card tier">
     <div class="stage-head">
@@ -187,7 +205,7 @@
       </div>
       <div class="seg" role="group" aria-label="안내선">
         <button id="guideBtn" aria-pressed="true">안내선</button>
-        <button id="ghostBtn" aria-pressed="true">반각 참조</button>
+        <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
 
@@ -225,10 +243,8 @@
           <div class="server-row" id="serverRow" hidden>
             <button class="btn primary" id="saveOne">서버에 저장</button>
           </div>
-          <p class="label" style="margin:12px 0 8px">복사로 내보내기</p>
-          <textarea id="exportOne" rows="9" readonly spellcheck="false"></textarea>
           <div class="export-actions">
-            <button class="btn" id="copyOne">현재 글자 복사</button>
+            <button class="btn" id="copyOne">현재 글자 복사 (customglyphs.py 형식)</button>
           </div>
         </div>
       </div>
@@ -254,16 +270,19 @@
   <!-- 3. 글자 불러오기 (팔레트) -->
   <section class="card tier">
     <p class="label">글자 불러오기</p>
-    <div class="palette-group">
-      <p class="sublabel">반각 A–Z · 0–9</p>
+    <div class="palette-group weight-only" data-weight="regular">
+      <p class="sublabel">반각 A–Z · a–z · 0–9</p>
       <div class="palette" id="paletteHalf"></div>
     </div>
-    <div class="palette-group">
-      <p class="sublabel">전각 Ａ–Ｚ · ０–９ <span class="hint-inline">커스텀이 없으면 원본 비트맵으로 시작합니다</span></p>
+    <div class="palette-group weight-only" data-weight="regular">
+      <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９ <span class="hint-inline">커스텀이 없으면 원본 비트맵으로 시작합니다</span></p>
       <div class="palette" id="paletteFull"></div>
     </div>
-    <!-- 한글 등 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
-  </section>
+    <div class="palette-group weight-only" data-weight="light">
+      <p class="sublabel">조합형 참조 음절 (초성 19×6 + 홑받침 16×3, 149자) <span class="hint-inline">모음과 함께 그려 초성·종성 형태를 잡습니다</span></p>
+      <div class="palette" id="paletteJamoRef"></div>
+    </div>
+    <!-- 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
   </section>
 
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -277,20 +296,26 @@
   // normalize embedded fallback ({char:{w,rows}}) to {char:{rows}}
   for (const k in DATA) if (DATA[k].rows) DATA[k] = DATA[k];
   let SERVER = false;
+  let WEIGHT = "regular";   // "regular" | "light" -- selects glyphs_regular.json / glyphs_light.json
   const H = 16;
   let W = 8;
   let cells = blank(W);
   let curChar = "A";
   let paletteData = {};   // char -> rows, sourced from the original bitmap as a fallback
 
-  const HALF_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const HALF_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   function toFullwidth(ch) {
     const c = ch.charCodeAt(0);
-    if (c >= 65 && c <= 90) return String.fromCodePoint(0xFF21 + (c - 65));
-    if (c >= 48 && c <= 57) return String.fromCodePoint(0xFF10 + (c - 48));
+    if (c >= 65 && c <= 90) return String.fromCodePoint(0xFF21 + (c - 65));   // A-Z
+    if (c >= 97 && c <= 122) return String.fromCodePoint(0xFF41 + (c - 97));  // a-z
+    if (c >= 48 && c <= 57) return String.fromCodePoint(0xFF10 + (c - 48));   // 0-9
     return ch;
   }
   const FULL_CHARS = Array.from(HALF_CHARS).map(toFullwidth).join("");
+  // 초성 19 x 블록타입 6(V/VC/H/HC/X/XC) 대표 음절 113자
+  // + 홑받침 16 x 받침형 3(VC/HC/XC) 대표 음절 (중복 제거, 39자 추가) = 149자
+  // (초성 쪽 ㅃ+XC, 받침 쪽 9개 조합은 KS X 1001 완성형에 실례가 없어 제외)
+  const JAMO_REF_CHARS = "가각고곡과곽까깍꼬꼭꽈꽉나낙노녹놔놘다닥도독돠돤따딱또똑똬똴라락로록롸롼마막모목뫄뫈바박보복봐봔빠빡뽀뽁뾔사삭소속솨솩싸싹쏘쏙쏴쏵아악오옥와왁자작조족좌좍짜짝쪼쪽쫘쫙차착초촉촤촨카칵코콕콰콱타탁토톡톼퇀파팍포폭퐈퐝하학호혹화확엮솎안온완얻곧알올왈암옴왐압옵왑앗옷왓았왔앙옹왕엊읒갗옻엌읔앝읕앞읖얗읗";
   let guidesOn = true;
   let ghostOn = true;
   let pvScale = 3, pvCachedText = null, pvCachedItems = null, pvTimer = null;
@@ -335,7 +360,6 @@
       nodes[i].classList.toggle("on", cells[y][x]);
     }
     updatePreview();
-    updateExport();
   }
   function setCell(x, y, val) {
     if (y < 0 || y >= H || x < 0 || x >= W) return;
@@ -365,7 +389,7 @@
     const c = cellAt(t); if (!c) return;
     setCell(c.x, c.y, paintVal);
   });
-  function endPaint() { if (painting) { painting = false; updatePreview(); updateExport(); } }
+  function endPaint() { if (painting) { painting = false; updatePreview(); } }
   gridEl.addEventListener("pointerup", endPaint);
   gridEl.addEventListener("pointercancel", endPaint);
   window.addEventListener("pointerup", endPaint);
@@ -374,7 +398,7 @@
     const c = cellAt(e.target); if (!c) return;
     if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
-      setCell(c.x, c.y, !cells[c.y][c.x]); updatePreview(); updateExport();
+      setCell(c.x, c.y, !cells[c.y][c.x]); updatePreview();
     }
   });
 
@@ -399,12 +423,29 @@
     }
   }
 
-  // ---- halfwidth ghost overlay (fullwidth canvas only) ----
+  // ---- ghost overlay ----
+  // Fullwidth Latin canvas -> ghost is the halfwidth counterpart (current,
+  // possibly custom). Everything else (halfwidth canvas, or fullwidth chars
+  // with no halfwidth counterpart -- Hangul, kana, ...) -> ghost is the
+  // ORIGINAL bitmap of the same character (ignoring any custom override),
+  // as a drawing reference while redesigning it.
   function toHalfwidth(ch) {
     const c = ch.codePointAt(0);
     if (c >= 0xFF21 && c <= 0xFF3A) return String.fromCodePoint(65 + (c - 0xFF21));
+    if (c >= 0xFF41 && c <= 0xFF5A) return String.fromCodePoint(97 + (c - 0xFF41));
     if (c >= 0xFF10 && c <= 0xFF19) return String.fromCodePoint(48 + (c - 0xFF10));
     return null;
+  }
+  let originalCache = {};
+  async function fetchOriginal(ch) {
+    try {
+      const res = await fetch("api/original?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      originalCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      originalCache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();   // redraw once the fetch lands
   }
   function drawGhost() {
     const cv = document.getElementById("ghost");
@@ -412,13 +453,19 @@
     cv.width = W * px; cv.height = H * px;
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostOn || W !== 16) return;
-    const halfCh = toHalfwidth(curChar);
-    if (!halfCh) return;
-    const rows = paletteSource(halfCh);
+    if (!ghostOn) return;
+
+    let rows;
+    const halfCh = W === 16 ? toHalfwidth(curChar) : null;
+    if (halfCh) {
+      rows = paletteSource(halfCh);
+    } else {
+      if (!(curChar in originalCache)) { fetchOriginal(curChar); return; }
+      rows = originalCache[curChar];
+    }
     if (!rows) return;
     const gw = rows[0].length;
-    const dx = Math.floor((W - gw) / 2);          // center the 8px ghost
+    const dx = Math.floor((W - gw) / 2);          // center if narrower than canvas
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
     for (let y = 0; y < H; y++)
       for (let x = 0; x < gw; x++)
@@ -448,9 +495,6 @@
     const body = rows.map(r => `        "${r}",`).join("\n");
     return `    "${ch}": [\n${body}\n    ],`;
   }
-  function updateExport() {
-    document.getElementById("exportOne").value = entryText(curChar, cellsToRows());
-  }
 
   // ---- text preview (mixed original + custom rendering) ----
   function pvIsFullwidth(cp) {
@@ -474,7 +518,7 @@
   async function fetchPreviewItems(s) {
     if (SERVER) {
       try {
-        const res = await fetch("api/text?s=" + encodeURIComponent(s), { cache: "no-store" });
+        const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(s), { cache: "no-store" });
         if (res.ok) return (await res.json()).chars;
       } catch (e) { /* fall through to local */ }
     }
@@ -544,16 +588,26 @@
   function buildPalette() {
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
+    buildPaletteGroup("paletteJamoRef", Array.from(JAMO_REF_CHARS));
   }
   async function loadPaletteData() {
-    try {
-      const res = await fetch("api/text?s=" + encodeURIComponent(HALF_CHARS + FULL_CHARS),
-                              { cache: "no-store" });
-      if (!res.ok) return;
-      const j = await res.json();
-      paletteData = {};
-      for (const item of j.chars) if (item.rows) paletteData[item.ch] = item.rows;
-    } catch (e) { /* offline: palette falls back to customized chars only */ }
+    paletteData = {};
+    // Latin palette groups are always Regular; the jamo-reference group is
+    // always Light -- each fetched with its own weight regardless of which
+    // tab is currently active, so switching tabs never has to re-fetch.
+    const jobs = [
+      ["regular", HALF_CHARS + FULL_CHARS],
+      ["light", JAMO_REF_CHARS],
+    ];
+    for (const [weight, chars] of jobs) {
+      try {
+        const res = await fetch("api/text?weight=" + weight + "&s=" + encodeURIComponent(chars),
+                                { cache: "no-store" });
+        if (!res.ok) continue;
+        const j = await res.json();
+        for (const item of j.chars) if (item.rows) paletteData[item.ch] = item.rows;
+      } catch (e) { /* offline: palette falls back to customized chars only */ }
+    }
   }
   function markPalette() {
     document.querySelectorAll(".swatch").forEach(s =>
@@ -640,7 +694,7 @@
     });
   }
   document.getElementById("copyOne").addEventListener("click", e =>
-    copy(document.getElementById("exportOne").value, e.currentTarget));
+    copy(entryText(curChar, cellsToRows()), e.currentTarget));
 
   document.getElementById("previewText").addEventListener("input", () => {
     clearTimeout(pvTimer);
@@ -667,22 +721,52 @@
     buildBtn.hidden = !on;
   }
 
+  async function fetchWeightData(weight) {
+    const res = await fetch("api/glyphs?weight=" + weight, { cache: "no-store" });
+    if (!res.ok) throw new Error("no api");
+    const src = await res.json();                // { "A": [rows], ... }
+    const out = {};
+    for (const ch in src) out[ch] = { rows: src[ch] };
+    return out;
+  }
+
   async function connect() {
     try {
-      const res = await fetch("api/glyphs", { cache: "no-store" });
-      if (!res.ok) throw new Error("no api");
-      const src = await res.json();               // { "A": [rows], ... }
-      DATA = {};
-      for (const ch in src) DATA[ch] = { rows: src[ch] };
+      DATA = await fetchWeightData(WEIGHT);
       setStatus(true, "서버 연결됨 · 저장 가능");
       await loadPaletteData();
       buildPalette();
       pvCachedText = null;               // refetch preview with server glyphs
-      loadChar(paletteSource(curChar) ? curChar : "A");
+      loadChar(paletteSource(curChar) ? curChar : defaultCharFor(WEIGHT));
     } catch (e) {
       setStatus(false, "오프라인 · 복사 방식");
     }
   }
+
+  function defaultCharFor(weight) {
+    return weight === "light" ? Array.from(JAMO_REF_CHARS)[0] : "A";
+  }
+
+  async function switchWeight(weight) {
+    if (weight === WEIGHT) return;
+    WEIGHT = weight;
+    document.documentElement.dataset.activeWeight = weight;
+    document.querySelectorAll(".wtab").forEach(b =>
+      b.setAttribute("aria-selected", b.dataset.weight === weight ? "true" : "false"));
+    if (SERVER) {
+      try {
+        DATA = await fetchWeightData(weight);
+      } catch (e) {
+        DATA = {};
+      }
+    }
+    buildPalette();
+    pvCachedText = null;
+    loadChar(defaultCharFor(weight));
+    renderTextPreview();
+  }
+  document.querySelectorAll(".wtab").forEach(b =>
+    b.addEventListener("click", () => switchWeight(b.dataset.weight)));
 
   // ---- toast ----
   const toastsEl = document.getElementById("toasts");
@@ -704,7 +788,7 @@
 
   async function saveCurrent() {
     const body = {}; body[curChar] = cellsToRows();
-    const res = await fetch("api/glyphs", {
+    const res = await fetch("api/glyphs?weight=" + WEIGHT, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -740,7 +824,7 @@
     btn.disabled = true; btn.textContent = "빌드 중…";
     console.log("[빌드] 시작…");
     try {
-      const res = await fetch("api/build", { method: "POST" });
+      const res = await fetch("api/build?weight=" + WEIGHT, { method: "POST" });
       const j = await res.json();
       console.log(`[빌드] ${j.ok ? "완료 ✓" : "실패"}\n${j.log || ""}`);
       showToast(j.ok ? "빌드 완료 ✓" : "빌드 실패 — 콘솔 확인", j.ok ? "success" : "error");

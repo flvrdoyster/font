@@ -1,17 +1,23 @@
-"""Hand-drawn glyphs that override the bitmap-derived ones.
+"""Hand-drawn glyphs that override the bitmap-derived ones (Regular weight).
 
-Glyph pixels live in tools/glyphs.json as { "A": [16 rows of '#'/'.'], ... }.
-Width is the length of a row (8 for half-width Latin, 16 for full-width).
-Designed to match the Dokkaebi Dinaru Hangul: 2px strokes, caps on rows 2-12.
+Glyph pixels live in tools/glyphs_regular.json as { "A": [16 rows of '#'/'.'],
+... }. Width is the length of a row (8 for half-width Latin, 16 for
+full-width). Designed to match the Dokkaebi Dinaru Hangul: 2px strokes, caps
+on rows 2-12.
+
+Light weight (1px stems) is a separate, parallel data file:
+tools/glyphs_light.json -- not loaded here; see scripts/thin_vertical.py and
+docs/ROADMAP.md.
 
 Edit with tools/pixel_editor.html (served by scripts/editor_server.py, which
-writes glyphs.json directly), or edit glyphs.json by hand. build_ufo.py uses
-these pixels instead of the original strike for any listed character.
+writes to the file for whichever weight tab is active), or edit the JSON by
+hand. build_ufo.py uses these pixels instead of the original strike for any
+listed character.
 """
 import json
 import os
 
-_JSON = os.path.join(os.path.dirname(__file__), "glyphs.json")
+_JSON = os.path.join(os.path.dirname(__file__), "glyphs_regular.json")
 
 
 def load_src():
