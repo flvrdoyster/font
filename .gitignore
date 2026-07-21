@@ -2,5 +2,7 @@
 build/*
 __pycache__/
 *.pyc
-/HANKBC.ttf
 .DS_Store
+
+# local-only reference material (copyrighted scans etc.) — never redistribute
+/refs/

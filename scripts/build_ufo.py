@@ -1,10 +1,10 @@
-"""Build a UFO from HANKBC bitmaps via the pixel->polygon converter.
+"""Build the 도깨비DNR 고딕 UFO from HANKBC bitmaps + custom glyph overrides.
 
 Usage:
-  python scripts/build_ufo.py [--subset "text..."]   # subset for PoC
-  python scripts/build_ufo.py --all                  # full 12,354-glyph font
+  python scripts/build_ufo.py [--subset "text..."]   # subset for quick checks
+  python scripts/build_ufo.py --all --proportional   # full font
 
-Writes build/HANKBC.ufo. Compile with fontmake separately.
+Writes build/DokkaebiDNRGothic.ufo. Compile with fontmake separately.
 """
 import argparse
 import sys
@@ -125,7 +125,7 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--proportional", action="store_true",
                     help="derive proportional advances from pixel ink bounds")
-    ap.add_argument("--out", default="build/HANKBC.ufo")
+    ap.add_argument("--out", default="build/DokkaebiDNRGothic.ufo")
     args = ap.parse_args()
 
     if args.all:

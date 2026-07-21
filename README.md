@@ -76,4 +76,4 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ## 참고
 
 - 출처·라이선스 조사: [docs/PROVENANCE.md](docs/PROVENANCE.md)
-- 1차 사료: [article.txt](article.txt) (김윤수 「글꼴 모음 #002」, 1994)
+- 1차 사료: [docs/sources/article.txt](docs/sources/article.txt) (김윤수 「글꼴 모음 #002」, 1994)

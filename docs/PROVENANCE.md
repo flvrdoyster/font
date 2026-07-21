@@ -2,9 +2,9 @@
 
 ## 결론: `HANKBC.HAN` = **도깨비 디나루** 글꼴
 
-1차 사료 [`../article.txt`](../article.txt) — 김윤수, 「글꼴 모음 #002」 (두번째 판, 1994-04-10) 에서 확정.
+1차 사료 [`sources/article.txt`](sources/article.txt) — 김윤수, 「글꼴 모음 #002」 (두번째 판, 1994-04-10) 에서 확정.
 
-해당 목록의 기재 (비고의 인물명은 미검증이라 생략; 원문은 [`../article.txt`](../article.txt) 309/559행 참조):
+해당 목록의 기재 (비고의 인물명은 미검증이라 생략; 원문은 [`sources/article.txt`](sources/article.txt) 309/559행 참조):
 
 ```
 도깨비 디나루     HANKBC  .HAN   도깨비 한글 3.30, […]
@@ -75,4 +75,4 @@
 - [도깨비 디나루 (위키백과)](https://ko.wikipedia.org/wiki/도깨비_디나루)
 - [추억의 프로그램 9. 도깨비 한글 (도아)](https://offree.net/entry/DKBy-and-Hangul)
 - [wkpark hfed/hfnt 변환 도구](http://chem.skku.ac.kr/~wkpark/project/hfed/hfnt.php)
-- 1차 사료: [`article.txt`](../article.txt) — 김윤수 「글꼴 모음 #002」 (1994-04-10)
+- 1차 사료: [`sources/article.txt`](sources/article.txt) — 김윤수 「글꼴 모음 #002」 (1994-04-10)

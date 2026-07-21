@@ -9,7 +9,7 @@ from fontTools.ttLib import TTFont
 sys.path.insert(0, "tools")
 import pixelfont as pf
 
-BUILT = sys.argv[1] if len(sys.argv) > 1 else "build/HANKBC.ttf"
+BUILT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic.ttf"
 
 
 def render_mono(face, cp, width):
