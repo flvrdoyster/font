@@ -1,0 +1,484 @@
+<title>도깨비DNR 픽셀 에디터</title>
+<style>
+  :root {
+    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
+    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
+    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
+      --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
+      --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
+    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
+    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4;
+  }
+  :root[data-theme="dark"] {
+    --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
+    --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
+    --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0;
+  }
+
+  * { box-sizing: border-box; }
+  .app {
+    font-family: var(--sans); color: var(--ink); background: var(--ground);
+    min-height: 100%; padding: 20px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar { max-width: 1080px; margin: 0 auto 18px; }
+  .topbar h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; font-weight: 650; }
+  .topbar p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .kbd { font-family: var(--mono); font-size: 11px; background: var(--faint);
+    padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+
+  .workspace { max-width: 1080px; margin: 0 auto; display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .workspace { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--faint);
+    border-radius: 12px; padding: 16px; }
+  .card + .card { margin-top: 16px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+
+  /* editing stage */
+  .stage-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-bottom: 14px; }
+  .field { display: flex; align-items: center; gap: 6px; }
+  .field span { font-size: 12px; color: var(--muted); }
+  input[type="text"] { font-family: var(--mono); font-size: 14px; width: 3.2em;
+    text-align: center; padding: 5px 6px; border: 1px solid var(--grid-line);
+    border-radius: 7px; background: var(--ground); color: var(--ink); }
+  .cp { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .seg { display: inline-flex; border: 1px solid var(--grid-line);
+    border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--muted);
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  .gridwrap { display: flex; justify-content: center; padding: 8px 0 4px; }
+  .grid-outer { position: relative; }
+  .grid { display: grid; gap: 0; background: var(--grid-line);
+    border: 2px solid var(--grid-line); touch-action: none; }
+  .cell { width: 22px; height: 22px; background: var(--cell-off); border: 0;
+    padding: 0; cursor: crosshair; outline: none; }
+  .cell:nth-child(odd) { background: var(--cell-off); }
+  .cell.on { background: var(--ink); }
+  .cell:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+  .grid.showgrid .cell { border-right: 1px solid var(--grid-line);
+    border-bottom: 1px solid var(--grid-line); }
+
+  .guides { position: absolute; inset: 2px; pointer-events: none; }
+  .guides .gline { position: absolute; left: 0; right: 0; height: 0;
+    border-top: 1px dashed var(--guide); opacity: 0.75; }
+  .guides .gline b { position: absolute; right: 100%; margin-right: 6px; top: -8px;
+    font-size: 9px; color: var(--guide); white-space: nowrap; font-family: var(--mono); }
+  .guides .vline { position: absolute; top: 0; bottom: 0; width: 0;
+    border-left: 1px dashed var(--guide); opacity: 0.55; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px;
+    justify-content: center; }
+  .btn { font: inherit; font-size: 12px; padding: 6px 11px; cursor: pointer;
+    border: 1px solid var(--grid-line); border-radius: 7px; background: var(--panel);
+    color: var(--ink); }
+  .btn:hover { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+  .preview { display: flex; gap: 20px; align-items: flex-end; margin-top: 16px;
+    padding-top: 14px; border-top: 1px solid var(--faint); flex-wrap: wrap; }
+  .preview canvas { image-rendering: pixelated; background: var(--cell-off);
+    border: 1px solid var(--faint); border-radius: 4px; }
+  .pv { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+  .pv span { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.06em; }
+
+  /* palette */
+  .palette { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; }
+  .swatch { aspect-ratio: 1; border: 1px solid var(--faint); border-radius: 6px;
+    background: var(--cell-off); cursor: pointer; padding: 3px; display: grid;
+    place-items: center; }
+  .swatch:hover { border-color: var(--accent); }
+  .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .swatch canvas { image-rendering: pixelated; width: 100%; height: auto; }
+
+  textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.45;
+    background: var(--ground); color: var(--ink); border: 1px solid var(--grid-line);
+    border-radius: 8px; padding: 10px; resize: vertical; }
+  .export-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .count { font-family: var(--mono); color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <h1>도깨비DNR 픽셀 에디터</h1>
+    <p>픽셀을 클릭·드래그해 편집합니다. 팔레트에서 기존 글자를 불러오고, 편집한 글자를
+       <span class="kbd">customglyphs.py</span> 형식으로 내보내 붙여넣으세요.</p>
+  </header>
+
+  <div class="workspace">
+    <main>
+      <section class="card">
+        <div class="stage-head">
+          <label class="field"><span>글자</span>
+            <input type="text" id="charInput" maxlength="2" value="A" autocomplete="off"></label>
+          <span class="cp" id="cpLabel">U+0041</span>
+          <span style="flex:1"></span>
+          <span class="label" style="margin:0">폭</span>
+          <div class="seg" role="group" aria-label="글자 폭">
+            <button id="w8" aria-pressed="true">8px</button>
+            <button id="w16" aria-pressed="false">16px</button>
+          </div>
+          <div class="seg" role="group" aria-label="안내선">
+            <button id="guideBtn" aria-pressed="true">안내선</button>
+          </div>
+        </div>
+
+        <div class="gridwrap">
+          <div class="grid-outer">
+            <div class="grid showgrid" id="grid"></div>
+            <div class="guides" id="guides"></div>
+          </div>
+        </div>
+
+        <div class="tools">
+          <button class="btn" data-act="clear">비우기</button>
+          <button class="btn" data-act="invert">반전</button>
+          <button class="btn" data-act="up">↑</button>
+          <button class="btn" data-act="down">↓</button>
+          <button class="btn" data-act="left">←</button>
+          <button class="btn" data-act="right">→</button>
+          <button class="btn" data-act="fliph">좌우대칭</button>
+          <button class="btn" data-act="flipv">상하대칭</button>
+        </div>
+
+        <div class="preview">
+          <div class="pv"><span>1×</span><canvas id="pv1"></canvas></div>
+          <div class="pv"><span>2×</span><canvas id="pv2"></canvas></div>
+          <div class="pv"><span>단어 미리보기</span><canvas id="pvWord" height="16"></canvas></div>
+        </div>
+      </section>
+    </main>
+
+    <aside>
+      <section class="card">
+        <p class="label">기존 글자 불러오기</p>
+        <div class="palette" id="palette"></div>
+      </section>
+
+      <section class="card">
+        <p class="label">현재 글자 내보내기</p>
+        <textarea id="exportOne" rows="9" readonly spellcheck="false"></textarea>
+        <div class="export-actions">
+          <button class="btn primary" id="copyOne">현재 글자 복사</button>
+          <button class="btn" id="addBatch">모음에 추가 ＋</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="label">모아서 내보내기 · <span class="count" id="batchCount">0</span>자</p>
+        <textarea id="exportBatch" rows="8" readonly spellcheck="false"
+          placeholder="&quot;모음에 추가&quot;로 편집한 글자들을 모아 한 번에 복사하세요."></textarea>
+        <div class="export-actions">
+          <button class="btn primary" id="copyBatch">모두 복사</button>
+          <button class="btn" id="clearBatch">모음 비우기</button>
+        </div>
+        <p class="hint">복사한 블록을 <span class="kbd">tools/customglyphs.py</span>의
+           <span class="kbd">GLYPHS_SRC</span> 안에 붙여넣고 다시 빌드하면 반영됩니다.</p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script id="glyphdata" type="application/json">{"A": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".######.", ".######.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "B": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".#####..", "........", "........", "........"]}, "C": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "D": {"w": 8, "rows": ["........", "........", ".####...", ".##.##..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##.##..", ".####...", "........", "........", "........"]}, "E": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "F": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "G": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", ".##.....", ".##.###.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "H": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".######.", ".######.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "I": {"w": 8, "rows": ["........", "........", "..####..", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "..####..", "........", "........", "........"]}, "J": {"w": 8, "rows": ["........", "........", "...####.", ".....##.", ".....##.", ".....##.", ".....##.", ".....##.", ".....##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "K": {"w": 8, "rows": ["........", "........", ".##..##.", ".##.##..", ".##.##..", ".####...", ".###....", ".####...", ".####...", ".##.##..", ".##.##..", ".##..##.", ".##..##.", "........", "........", "........"]}, "L": {"w": 8, "rows": ["........", "........", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "M": {"w": 8, "rows": ["........", "........", "##....##", "###..###", "########", "########", "##.##.##", "##.##.##", "##....##", "##....##", "##....##", "##....##", "##....##", "........", "........", "........"]}, "N": {"w": 8, "rows": ["........", "........", "##....##", "###...##", "####..##", "####..##", "##.##.##", "##.##.##", "##..####", "##..####", "##...###", "##....##", "##....##", "........", "........", "........"]}, "O": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "P": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "Q": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##.##..", ".##.##..", "..####..", ".....##.", "........", "........", "........"]}, "R": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##.##..", ".##.##..", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "S": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", "..####..", "....##..", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "T": {"w": 8, "rows": ["........", "........", ".######.", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "........", "........", "........"]}, "U": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "V": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..#..#..", "..####..", "..####..", "...##...", "........", "........", "........"]}, "W": {"w": 8, "rows": ["........", "........", "##....##", "##....##", "##....##", "##....##", "##....##", "##.##.##", "##.##.##", "########", "########", "###..###", "##....##", "........", "........", "........"]}, "X": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", "..#..#..", "..####..", "...##...", "...##...", "..####..", "..#..#..", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "Y": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", "..#..#..", "..####..", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "........", "........", "........"]}, "Z": {"w": 8, "rows": ["........", "........", ".######.", ".....##.", ".....##.", "....##..", "...##...", "..##....", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "0": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##.###.", ".##.###.", ".###.##.", ".###.##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "1": {"w": 8, "rows": ["........", "........", "...##...", "..###...", ".####...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", ".######.", "........", "........", "........"]}, "2": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".....##.", ".....##.", "....##..", "...##...", "..##....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "3": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".....##.", ".....##.", "...###..", "...###..", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "4": {"w": 8, "rows": ["........", "........", "....##..", "...###..", "..####..", ".##.##..", ".##.##..", ".##.##..", ".######.", ".######.", "....##..", "....##..", "....##..", "........", "........", "........"]}, "5": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", "..###.##", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "6": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "7": {"w": 8, "rows": ["........", "........", ".######.", ".....##.", "....##..", "....##..", "...##...", "...##...", "..##....", "..##....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "8": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", "..####..", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "9": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..#####.", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}}</script>
+<script>
+(function () {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("glyphdata").textContent);
+  const H = 16;
+  let W = 8;
+  let cells = blank(W);
+  let curChar = "A";
+  let guidesOn = true;
+  const batch = {};
+
+  const gridEl = document.getElementById("grid");
+  const guidesEl = document.getElementById("guides");
+  const charInput = document.getElementById("charInput");
+  const cpLabel = document.getElementById("cpLabel");
+
+  function blank(w) {
+    return Array.from({ length: H }, () => Array(w).fill(false));
+  }
+  function rowsToCells(rows) {
+    const w = rows[0].length;
+    return rows.map(r => Array.from({ length: w }, (_, x) => r[x] === "#"));
+  }
+  function cellsToRows() {
+    return cells.map(row => row.map(v => (v ? "#" : ".")).join(""));
+  }
+
+  // ---- grid rendering ----
+  function buildGrid() {
+    gridEl.style.gridTemplateColumns = `repeat(${W}, 22px)`;
+    gridEl.innerHTML = "";
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const b = document.createElement("button");
+        b.className = "cell";
+        b.dataset.x = x; b.dataset.y = y;
+        b.setAttribute("aria-label", `${x},${y}`);
+        gridEl.appendChild(b);
+      }
+    }
+    paintAll();
+    drawGuides();
+  }
+  function paintAll() {
+    const nodes = gridEl.children;
+    for (let i = 0; i < nodes.length; i++) {
+      const x = +nodes[i].dataset.x, y = +nodes[i].dataset.y;
+      nodes[i].classList.toggle("on", cells[y][x]);
+    }
+    updatePreview();
+    updateExport();
+  }
+  function setCell(x, y, val) {
+    if (y < 0 || y >= H || x < 0 || x >= W) return;
+    if (cells[y][x] === val) return;
+    cells[y][x] = val;
+    const idx = y * W + x;
+    gridEl.children[idx].classList.toggle("on", val);
+  }
+
+  // ---- painting ----
+  let painting = false, paintVal = true;
+  function cellAt(t) {
+    if (!t || !t.classList || !t.classList.contains("cell")) return null;
+    return { x: +t.dataset.x, y: +t.dataset.y };
+  }
+  gridEl.addEventListener("pointerdown", e => {
+    const c = cellAt(e.target); if (!c) return;
+    e.preventDefault();
+    painting = true;
+    paintVal = !cells[c.y][c.x];
+    setCell(c.x, c.y, paintVal);
+    gridEl.setPointerCapture(e.pointerId);
+  });
+  gridEl.addEventListener("pointermove", e => {
+    if (!painting) return;
+    const t = document.elementFromPoint(e.clientX, e.clientY);
+    const c = cellAt(t); if (!c) return;
+    setCell(c.x, c.y, paintVal);
+  });
+  function endPaint() { if (painting) { painting = false; updatePreview(); updateExport(); } }
+  gridEl.addEventListener("pointerup", endPaint);
+  gridEl.addEventListener("pointercancel", endPaint);
+  window.addEventListener("pointerup", endPaint);
+  // keyboard toggle on focused cell
+  gridEl.addEventListener("keydown", e => {
+    const c = cellAt(e.target); if (!c) return;
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      setCell(c.x, c.y, !cells[c.y][c.x]); updatePreview(); updateExport();
+    }
+  });
+
+  // ---- guides ----
+  function drawGuides() {
+    guidesEl.innerHTML = "";
+    guidesEl.style.display = guidesOn ? "block" : "none";
+    if (!guidesOn) return;
+    const ch = 100 / H;
+    const lines = [[2, "cap"], [6, "x-height"], [13, "baseline"]];
+    for (const [row, name] of lines) {
+      const d = document.createElement("div");
+      d.className = "gline";
+      d.style.top = (row * ch) + "%";
+      d.innerHTML = `<b>${name}</b>`;
+      guidesEl.appendChild(d);
+    }
+    if (W === 16) {
+      const v = document.createElement("div");
+      v.className = "vline"; v.style.left = "50%";
+      guidesEl.appendChild(v);
+    }
+  }
+
+  // ---- preview ----
+  function renderTo(canvas, scale) {
+    canvas.width = W * scale; canvas.height = H * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (cells[y][x]) ctx.fillRect(x * scale, y * scale, scale, scale);
+  }
+  function updatePreview() {
+    renderTo(document.getElementById("pv1"), 1);
+    renderTo(document.getElementById("pv2"), 2);
+    renderWord();
+  }
+  function renderWord() {
+    // show current glyph repeated with a couple neighbours for spacing feel
+    const word = ["H", curChar, "x", curChar].map(c => DATA[c] ? DATA[c].rows : null);
+    word[1] = cellsToRows(); word[3] = cellsToRows();
+    const canvas = document.getElementById("pvWord");
+    const scale = 3, gap = 1;
+    let total = 0;
+    const grids = word.map(r => r ? rowsToCells(r) : null);
+    grids.forEach(g => { total += (g ? g[0].length : 4) + gap; });
+    canvas.width = total * scale; canvas.height = H * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    let px = 0;
+    for (const g of grids) {
+      const w = g ? g[0].length : 4;
+      if (g) for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
+        if (g[y][x]) ctx.fillRect((px + x) * scale, y * scale, scale, scale);
+      px += w + gap;
+    }
+  }
+
+  // ---- export ----
+  function entryText(ch, rows) {
+    const body = rows.map(r => `        "${r}",`).join("\n");
+    return `    "${ch}": [\n${body}\n    ],`;
+  }
+  function updateExport() {
+    document.getElementById("exportOne").value = entryText(curChar, cellsToRows());
+  }
+  function renderBatch() {
+    const keys = Object.keys(batch);
+    document.getElementById("batchCount").textContent = keys.length;
+    document.getElementById("exportBatch").value =
+      keys.map(k => entryText(k, batch[k])).join("\n");
+  }
+
+  // ---- palette ----
+  function buildPalette() {
+    const pal = document.getElementById("palette");
+    pal.innerHTML = "";
+    Object.keys(DATA).sort().forEach(ch => {
+      const s = document.createElement("button");
+      s.className = "swatch"; s.dataset.ch = ch; s.title = ch;
+      const cv = document.createElement("canvas");
+      const g = rowsToCells(DATA[ch].rows), w = g[0].length;
+      cv.width = w; cv.height = H;
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+      for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
+        if (g[y][x]) ctx.fillRect(x, y, 1, 1);
+      s.appendChild(cv);
+      s.addEventListener("click", () => loadChar(ch));
+      pal.appendChild(s);
+    });
+  }
+  function markPalette() {
+    document.querySelectorAll(".swatch").forEach(s =>
+      s.classList.toggle("active", s.dataset.ch === curChar));
+  }
+
+  // ---- load / char ----
+  function loadChar(ch) {
+    curChar = ch;
+    charInput.value = ch;
+    if (DATA[ch]) {
+      const rows = DATA[ch].rows;
+      setWidth(rows[0].length, true);
+      cells = rowsToCells(rows);
+    } else {
+      cells = blank(W);
+    }
+    cpLabel.textContent = "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
+    buildGrid();
+    markPalette();
+  }
+  charInput.addEventListener("input", () => {
+    const v = charInput.value;
+    if (!v) return;
+    const ch = Array.from(v)[0];
+    loadChar(ch);
+  });
+
+  // ---- width ----
+  function setWidth(w, silent) {
+    if (w === W) return;
+    const old = cells;
+    W = w;
+    cells = blank(W);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < Math.min(w, old[0].length); x++)
+        cells[y][x] = old[y][x] || false;
+    document.getElementById("w8").setAttribute("aria-pressed", W === 8);
+    document.getElementById("w16").setAttribute("aria-pressed", W === 16);
+    if (!silent) buildGrid();
+  }
+  document.getElementById("w8").addEventListener("click", () => { setWidth(8); });
+  document.getElementById("w16").addEventListener("click", () => { setWidth(16); });
+
+  // ---- guides toggle ----
+  document.getElementById("guideBtn").addEventListener("click", e => {
+    guidesOn = !guidesOn;
+    e.currentTarget.setAttribute("aria-pressed", guidesOn);
+    drawGuides();
+  });
+
+  // ---- tools ----
+  document.querySelector(".tools").addEventListener("click", e => {
+    const act = e.target.dataset.act; if (!act) return;
+    if (act === "clear") cells = blank(W);
+    else if (act === "invert") cells = cells.map(r => r.map(v => !v));
+    else if (act === "up") cells = shift(0, -1);
+    else if (act === "down") cells = shift(0, 1);
+    else if (act === "left") cells = shift(-1, 0);
+    else if (act === "right") cells = shift(1, 0);
+    else if (act === "fliph") cells = cells.map(r => [...r].reverse());
+    else if (act === "flipv") cells = [...cells].reverse();
+    paintAll();
+  });
+  function shift(dx, dy) {
+    const out = blank(W);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const ny = y + dy, nx = x + dx;
+      if (ny >= 0 && ny < H && nx >= 0 && nx < W) out[ny][nx] = cells[y][x];
+    }
+    return out;
+  }
+
+  // ---- copy ----
+  function copy(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const t = btn.textContent; btn.textContent = "복사됨 ✓";
+      setTimeout(() => { btn.textContent = t; }, 1200);
+    });
+  }
+  document.getElementById("copyOne").addEventListener("click", e =>
+    copy(document.getElementById("exportOne").value, e.currentTarget));
+  document.getElementById("addBatch").addEventListener("click", () => {
+    batch[curChar] = cellsToRows(); renderBatch();
+  });
+  document.getElementById("copyBatch").addEventListener("click", e => {
+    if (Object.keys(batch).length) copy(document.getElementById("exportBatch").value, e.currentTarget);
+  });
+  document.getElementById("clearBatch").addEventListener("click", () => {
+    for (const k in batch) delete batch[k]; renderBatch();
+  });
+
+  // ---- init ----
+  buildPalette();
+  loadChar("A");
+})();
+</script>
