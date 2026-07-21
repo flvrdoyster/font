@@ -117,6 +117,15 @@
   .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
   .count { font-family: var(--mono); color: var(--accent); }
 
+  .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+    border-radius: 20px; margin-left: 6px; white-space: nowrap;
+    background: var(--faint); color: var(--muted); }
+  .status[data-on="true"] { background: var(--accent-soft); color: var(--accent); }
+  .server-row { display: flex; gap: 8px; margin-top: 10px; }
+  .server-row[hidden] { display: none; }
+  .buildlog { font-family: var(--mono); font-size: 11px; color: var(--muted);
+    margin-top: 8px; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -124,7 +133,8 @@
   <header class="topbar">
     <h1>도깨비DNR 픽셀 에디터</h1>
     <p>픽셀을 클릭·드래그해 편집합니다. 팔레트에서 기존 글자를 불러오고, 편집한 글자를
-       <span class="kbd">customglyphs.py</span> 형식으로 내보내 붙여넣으세요.</p>
+       저장(로컬 서버)하거나 <span class="kbd">customglyphs.py</span> 형식으로 내보내세요.
+       <span class="status" id="status" data-on="false">오프라인 · 복사 방식</span></p>
   </header>
 
   <div class="workspace">
@@ -179,9 +189,15 @@
 
       <section class="card">
         <p class="label">현재 글자 내보내기</p>
+        <div class="server-row" id="serverRow" hidden>
+          <button class="btn primary" id="saveOne">서버에 저장</button>
+          <button class="btn" id="saveBuild">저장 후 빌드</button>
+        </div>
+        <div class="buildlog" id="buildLog"></div>
+        <p class="label" style="margin:12px 0 8px">복사로 내보내기</p>
         <textarea id="exportOne" rows="9" readonly spellcheck="false"></textarea>
         <div class="export-actions">
-          <button class="btn primary" id="copyOne">현재 글자 복사</button>
+          <button class="btn" id="copyOne">현재 글자 복사</button>
           <button class="btn" id="addBatch">모음에 추가 ＋</button>
         </div>
       </section>
@@ -205,7 +221,10 @@
 <script>
 (function () {
   "use strict";
-  const DATA = JSON.parse(document.getElementById("glyphdata").textContent);
+  let DATA = JSON.parse(document.getElementById("glyphdata").textContent);
+  // normalize embedded fallback ({char:{w,rows}}) to {char:{rows}}
+  for (const k in DATA) if (DATA[k].rows) DATA[k] = DATA[k];
+  let SERVER = false;
   const H = 16;
   let W = 8;
   let cells = blank(W);
@@ -477,8 +496,70 @@
     for (const k in batch) delete batch[k]; renderBatch();
   });
 
+  // ---- server integration ----
+  const statusEl = document.getElementById("status");
+  const serverRow = document.getElementById("serverRow");
+  const buildLog = document.getElementById("buildLog");
+
+  function setStatus(on, text) {
+    SERVER = on;
+    statusEl.dataset.on = on ? "true" : "false";
+    statusEl.textContent = text;
+    serverRow.hidden = !on;
+  }
+
+  async function connect() {
+    try {
+      const res = await fetch("api/glyphs", { cache: "no-store" });
+      if (!res.ok) throw new Error("no api");
+      const src = await res.json();               // { "A": [rows], ... }
+      DATA = {};
+      for (const ch in src) DATA[ch] = { rows: src[ch] };
+      setStatus(true, "서버 연결됨 · 저장 가능");
+      buildPalette();
+      loadChar(DATA[curChar] ? curChar : "A");
+    } catch (e) {
+      setStatus(false, "오프라인 · 복사 방식");
+    }
+  }
+
+  async function saveCurrent() {
+    const body = {}; body[curChar] = cellsToRows();
+    const res = await fetch("api/glyphs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await res.json();
+    DATA[curChar] = { rows: cellsToRows() };
+    buildPalette(); markPalette();
+    return j;
+  }
+
+  document.getElementById("saveOne").addEventListener("click", async e => {
+    const t = e.currentTarget.textContent;
+    await saveCurrent();
+    e.currentTarget.textContent = "저장됨 ✓";
+    setTimeout(() => { e.currentTarget.textContent = t; }, 1200);
+  });
+
+  document.getElementById("saveBuild").addEventListener("click", async e => {
+    const btn = e.currentTarget; const t = btn.textContent;
+    btn.disabled = true; btn.textContent = "저장 후 빌드 중…";
+    await saveCurrent();
+    buildLog.textContent = "빌드 중… (수 초)";
+    try {
+      const res = await fetch("api/build", { method: "POST" });
+      const j = await res.json();
+      buildLog.textContent = (j.ok ? "빌드 완료 ✓\n" : "빌드 실패\n") + (j.log || "");
+    } catch (err) {
+      buildLog.textContent = "빌드 요청 실패: " + err;
+    }
+    btn.disabled = false; btn.textContent = t;
+  });
+
   // ---- init ----
   buildPalette();
   loadChar("A");
+  connect();
 })();
 </script>

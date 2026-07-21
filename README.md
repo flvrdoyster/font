@@ -25,15 +25,27 @@
 
 ```
 original/HANKBC.ttf
-  └ tools/pixelfont.py   픽셀→병합 폴리곤 (픽셀-정확)
-  └ tools/spacing.py     잉크 기준 비례폭 산출
-  └ tools/metadata.py    이름/OS2/gasp 등 메타데이터
-  └ scripts/build_ufo.py → build/DokkaebiDNRGothic.ufo  ◀── 수작업 리드로잉
-  └ fontmake             → .ttf / .otf
-  └ scripts/finalize.py  한국어 로컬라이즈 이름 추가
+  └ tools/pixelfont.py    픽셀→병합 폴리곤 (픽셀-정확)
+  └ tools/customglyphs.py 손으로 그린 글리프 오버라이드 (tools/glyphs.json 로드)
+  └ tools/spacing.py      잉크 기준 비례폭 산출
+  └ tools/metadata.py     이름/OS2/gasp 등 메타데이터
+  └ scripts/build_ufo.py  → build/DokkaebiDNRGothic.ufo
+  └ fontmake              → .ttf / .otf
+  └ scripts/finalize.py   한국어 로컬라이즈 이름 추가
   └ scripts/verify_ttf.py       픽셀-정확 회귀 검증
   └ scripts/coverage_report.py  빠진 흔한 문자 리포트
 ```
+
+## 픽셀 에디터 (글자 직접 편집)
+
+```bash
+.venv/bin/python scripts/editor_server.py       # http://localhost:8000
+```
+
+브라우저에서 픽셀을 클릭·드래그해 편집 → **서버에 저장**하면 `tools/glyphs.json`에
+바로 기록되고, **저장 후 빌드**로 TTF까지 재생성됩니다. 손으로 그린 글자는 원본
+비트맵을 덮어씁니다(현재 대문자 A–Z·숫자 0–9). 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)을
+열면 복사 방식으로도 쓸 수 있습니다.
 
 ## 빌드
 
