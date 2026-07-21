@@ -1,0 +1,7 @@
+fontbakery==1.1.0
+fontmake==3.12.1
+fonttools==4.63.0
+freetype-py==2.3.0
+pillow==12.3.0
+ufo2ft==3.9.0
+ufoLib2==0.18.1
