@@ -19,6 +19,7 @@ import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
@@ -45,6 +46,41 @@ def write_glyphs(data):
         f.write("\n")
 
 
+_ORIG = None  # lazy (strike, cmap) from the original bitmap font
+
+
+def _orig():
+    global _ORIG
+    if _ORIG is None:
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import pixelfont as pf
+        from fontTools.ttLib import TTFont
+        font = TTFont(os.path.join(ROOT, "original", "HANKBC.ttf"))
+        _ORIG = (pf.read_strike(font), font.getBestCmap())
+    return _ORIG
+
+
+def text_grids(s):
+    """Per-char pixel grids for preview: custom glyphs override the original."""
+    custom = read_glyphs()
+    try:
+        strike, cmap = _orig()
+    except Exception:
+        strike, cmap = {}, {}
+    out = []
+    for ch in s:
+        grid = custom.get(ch)
+        if grid is None:
+            gname = cmap.get(ord(ch))
+            if gname and gname in strike:
+                w, rows = strike[gname]
+                if w:
+                    grid = ["".join("#" if r & (1 << (w - 1 - x)) else "."
+                                    for x in range(w)) for r in rows]
+        out.append({"ch": ch, "rows": grid})
+    return out
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         payload = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -65,6 +101,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, page, "text/html; charset=utf-8")
         if self.path == "/api/glyphs":
             return self._send(200, json.dumps(read_glyphs(), ensure_ascii=False))
+        if self.path.startswith("/api/text"):
+            qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": text_grids(s)},
+                                              ensure_ascii=False))
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):

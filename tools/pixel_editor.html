@@ -31,19 +31,23 @@
     min-height: 100%; padding: 20px; line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  .topbar { max-width: 1080px; margin: 0 auto 18px; }
+  .topbar { max-width: 1080px; margin: 0 auto 18px; display: flex;
+    align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .topbar-main { min-width: 0; }
   .topbar h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; font-weight: 650; }
   .topbar p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .topbar .btn { flex: none; }
   .kbd { font-family: var(--mono); font-size: 11px; background: var(--faint);
     padding: 1px 5px; border-radius: 4px; color: var(--ink); }
 
-  .workspace { max-width: 1080px; margin: 0 auto; display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
-  @media (max-width: 820px) { .workspace { grid-template-columns: 1fr; } }
+  .tier { max-width: 1080px; margin: 16px auto 0; }
+  .tier:first-of-type { margin-top: 0; }
 
   .card { background: var(--panel); border: 1px solid var(--faint);
     border-radius: 12px; padding: 16px; }
   .card + .card { margin-top: 16px; }
+
+  .subsection { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--faint); }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--muted); font-weight: 600; margin: 0 0 8px; }
 
@@ -63,6 +67,10 @@
     font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer; }
   .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
+  .draw-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    align-items: start; margin-top: 14px; }
+  @media (max-width: 700px) { .draw-split { grid-template-columns: 1fr; } }
+
   .gridwrap { display: flex; justify-content: center; padding: 8px 0 4px; }
   .grid-outer { position: relative; }
   .grid { display: grid; gap: 0; background: var(--grid-line);
@@ -74,6 +82,8 @@
   .cell:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
   .grid.showgrid .cell { border-right: 1px solid var(--grid-line);
     border-bottom: 1px solid var(--grid-line); }
+
+  .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.18; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -100,8 +110,7 @@
     letter-spacing: 0.06em; }
 
   /* palette */
-  .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px);
-    gap: 5px; max-height: 210px; overflow-y: auto; padding-right: 2px; }
+  .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 5px; }
   .swatch { width: 30px; height: 30px; border: 1px solid var(--faint); border-radius: 6px;
     background: var(--cell-off); cursor: pointer; padding: 0; display: grid;
     place-items: center; overflow: hidden; }
@@ -110,6 +119,10 @@
   .swatch canvas { image-rendering: pixelated; max-width: 24px; max-height: 24px;
     width: auto; height: auto; }
 
+  .palette-group + .palette-group { margin-top: 16px; }
+  .sublabel { font-size: 11px; color: var(--muted); margin: 0 0 8px; letter-spacing: 0.03em; }
+  .hint-inline { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+
   textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.45;
     background: var(--ground); color: var(--ink); border: 1px solid var(--grid-line);
     border-radius: 8px; padding: 10px; resize: vertical; }
@@ -117,7 +130,12 @@
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .btn.primary:hover { filter: brightness(1.06); }
   .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
-  .count { font-family: var(--mono); color: var(--accent); }
+
+  /* text preview */
+  #previewText { width: 100%; text-align: left; }
+  .pvscroll { overflow-x: auto; margin-top: 10px; background: var(--cell-off);
+    border: 1px solid var(--faint); border-radius: 8px; padding: 8px; }
+  .pvscroll canvas { image-rendering: pixelated; display: block; }
 
   .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
     border-radius: 20px; margin-left: 6px; white-space: nowrap;
@@ -125,45 +143,66 @@
   .status[data-on="true"] { background: var(--accent-soft); color: var(--accent); }
   .server-row { display: flex; gap: 8px; margin-top: 10px; }
   .server-row[hidden] { display: none; }
-  .buildlog { font-family: var(--mono); font-size: 11px; color: var(--muted);
-    margin-top: 8px; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+  /* toast */
+  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { pointer-events: auto; display: flex; align-items: center; gap: 8px;
+    font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
+    color: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(6px); transition: opacity 0.18s ease, transform 0.18s ease; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast[data-kind="error"] { background: #b5432f; color: #fff; }
+  .toast[data-kind="success"] .dot { background: #59c37a; }
+  .toast .dot { width: 7px; height: 7px; border-radius: 50%; background: #8fa0b8; flex: none; }
 
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    .toast { transition: none; }
+  }
 </style>
 
 <div class="app">
   <header class="topbar">
-    <h1>도깨비DNR 픽셀 에디터</h1>
-    <p>픽셀을 클릭·드래그해 편집합니다. 팔레트에서 기존 글자를 불러오고, 편집한 글자를
-       저장(로컬 서버)하거나 <span class="kbd">customglyphs.py</span> 형식으로 내보내세요.
-       <span class="status" id="status" data-on="false">오프라인 · 복사 방식</span></p>
+    <div class="topbar-main">
+      <h1>도깨비DNR 픽셀 에디터</h1>
+      <p>픽셀을 클릭·드래그해 편집합니다. 팔레트에서 기존 글자를 불러오고, 편집한 글자를
+         저장(로컬 서버)하거나 <span class="kbd">customglyphs.py</span> 형식으로 내보내세요.
+         <span class="status" id="status" data-on="false">오프라인 · 복사 방식</span></p>
+    </div>
+    <button class="btn primary" id="buildFont" hidden
+      title="지금까지 저장된 모든 글자를 한 번에 컴파일합니다. 편집 중인 미저장 글자는 포함되지 않습니다. 빌드 로그는 브라우저 콘솔에 출력됩니다.">빌드</button>
   </header>
 
-  <div class="workspace">
-    <main>
-      <section class="card">
-        <div class="stage-head">
-          <label class="field"><span>글자</span>
-            <input type="text" id="charInput" maxlength="2" value="A" autocomplete="off"></label>
-          <span class="cp" id="cpLabel">U+0041</span>
-          <span style="flex:1"></span>
-          <span class="label" style="margin:0">폭</span>
-          <div class="seg" role="group" aria-label="글자 폭">
-            <button id="w8" aria-pressed="true">8px</button>
-            <button id="w16" aria-pressed="false">16px</button>
-          </div>
-          <div class="seg" role="group" aria-label="안내선">
-            <button id="guideBtn" aria-pressed="true">안내선</button>
-          </div>
-        </div>
+  <!-- 1. 글자 그리기: 캔버스 · 1×/2×/3× 미리보기 · 내보내기 -->
+  <section class="card tier">
+    <div class="stage-head">
+      <label class="field"><span>글자</span>
+        <input type="text" id="charInput" maxlength="2" value="A" autocomplete="off"></label>
+      <span class="cp" id="cpLabel">U+0041</span>
+      <span style="flex:1"></span>
+      <span class="label" style="margin:0">폭</span>
+      <div class="seg" role="group" aria-label="글자 폭">
+        <button id="w8" aria-pressed="true">8px</button>
+        <button id="w16" aria-pressed="false">16px</button>
+      </div>
+      <div class="seg" role="group" aria-label="안내선">
+        <button id="guideBtn" aria-pressed="true">안내선</button>
+        <button id="ghostBtn" aria-pressed="true">반각 참조</button>
+      </div>
+    </div>
 
+    <div class="draw-split">
+      <div class="draw-canvas">
         <div class="gridwrap">
           <div class="grid-outer">
             <div class="grid showgrid" id="grid"></div>
+            <canvas class="ghost" id="ghost"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
+      </div>
 
+      <div class="draw-side">
         <div class="tools">
           <button class="btn" data-act="clear">비우기</button>
           <button class="btn" data-act="invert">반전</button>
@@ -178,45 +217,56 @@
         <div class="preview">
           <div class="pv"><span>1×</span><canvas id="pv1"></canvas></div>
           <div class="pv"><span>2×</span><canvas id="pv2"></canvas></div>
-          <div class="pv"><span>단어 미리보기</span><canvas id="pvWord" height="16"></canvas></div>
+          <div class="pv"><span>3×</span><canvas id="pv3"></canvas></div>
         </div>
-      </section>
-    </main>
 
-    <aside>
-      <section class="card">
-        <p class="label">기존 글자 불러오기</p>
-        <div class="palette" id="palette"></div>
-      </section>
+        <div class="subsection">
+          <p class="label">글자 내보내기</p>
+          <div class="server-row" id="serverRow" hidden>
+            <button class="btn primary" id="saveOne">서버에 저장</button>
+          </div>
+          <p class="label" style="margin:12px 0 8px">복사로 내보내기</p>
+          <textarea id="exportOne" rows="9" readonly spellcheck="false"></textarea>
+          <div class="export-actions">
+            <button class="btn" id="copyOne">현재 글자 복사</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      <section class="card">
-        <p class="label">현재 글자 내보내기</p>
-        <div class="server-row" id="serverRow" hidden>
-          <button class="btn primary" id="saveOne">서버에 저장</button>
-          <button class="btn" id="saveBuild">저장 후 빌드</button>
-        </div>
-        <div class="buildlog" id="buildLog"></div>
-        <p class="label" style="margin:12px 0 8px">복사로 내보내기</p>
-        <textarea id="exportOne" rows="9" readonly spellcheck="false"></textarea>
-        <div class="export-actions">
-          <button class="btn" id="copyOne">현재 글자 복사</button>
-          <button class="btn" id="addBatch">모음에 추가 ＋</button>
-        </div>
-      </section>
+  <!-- 2. 텍스트 미리보기 -->
+  <section class="card tier">
+    <p class="label">텍스트 미리보기</p>
+    <input type="text" id="previewText"
+      value="다람쥐 헌 쳇바퀴에 타고파 Dokkaebi DNR ２０２６－０１－０１ vs 2026-01-01 한글ＡＢＣ조화"
+      spellcheck="false" autocomplete="off">
+    <div class="seg" role="group" aria-label="미리보기 배율" style="margin-top:8px">
+      <button data-pvscale="2" aria-pressed="false">2×</button>
+      <button data-pvscale="3" aria-pressed="true">3×</button>
+      <button data-pvscale="4" aria-pressed="false">4×</button>
+    </div>
+    <div class="pvscroll"><canvas id="pvText"></canvas></div>
+    <p class="hint">편집 중인 글자는 저장 전 상태가 즉시 반영됩니다.
+       한글 등 원본 글리프는 서버 연결 시 표시됩니다.</p>
+  </section>
 
-      <section class="card">
-        <p class="label">모아서 내보내기 · <span class="count" id="batchCount">0</span>자</p>
-        <textarea id="exportBatch" rows="8" readonly spellcheck="false"
-          placeholder="&quot;모음에 추가&quot;로 편집한 글자들을 모아 한 번에 복사하세요."></textarea>
-        <div class="export-actions">
-          <button class="btn primary" id="copyBatch">모두 복사</button>
-          <button class="btn" id="clearBatch">모음 비우기</button>
-        </div>
-        <p class="hint">복사한 블록을 <span class="kbd">tools/customglyphs.py</span>의
-           <span class="kbd">GLYPHS_SRC</span> 안에 붙여넣고 다시 빌드하면 반영됩니다.</p>
-      </section>
-    </aside>
-  </div>
+  <!-- 3. 글자 불러오기 (팔레트) -->
+  <section class="card tier">
+    <p class="label">글자 불러오기</p>
+    <div class="palette-group">
+      <p class="sublabel">반각 A–Z · 0–9</p>
+      <div class="palette" id="paletteHalf"></div>
+    </div>
+    <div class="palette-group">
+      <p class="sublabel">전각 Ａ–Ｚ · ０–９ <span class="hint-inline">커스텀이 없으면 원본 비트맵으로 시작합니다</span></p>
+      <div class="palette" id="paletteFull"></div>
+    </div>
+    <!-- 한글 등 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
+  </section>
+  </section>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 </div>
 
 <script id="glyphdata" type="application/json">{"A": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".######.", ".######.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "B": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".#####..", "........", "........", "........"]}, "C": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "D": {"w": 8, "rows": ["........", "........", ".####...", ".##.##..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##.##..", ".####...", "........", "........", "........"]}, "E": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "F": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "G": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", ".##.....", ".##.###.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "H": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".######.", ".######.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "I": {"w": 8, "rows": ["........", "........", "..####..", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "..####..", "........", "........", "........"]}, "J": {"w": 8, "rows": ["........", "........", "...####.", ".....##.", ".....##.", ".....##.", ".....##.", ".....##.", ".....##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "K": {"w": 8, "rows": ["........", "........", ".##..##.", ".##.##..", ".##.##..", ".####...", ".###....", ".####...", ".####...", ".##.##..", ".##.##..", ".##..##.", ".##..##.", "........", "........", "........"]}, "L": {"w": 8, "rows": ["........", "........", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "M": {"w": 8, "rows": ["........", "........", "##....##", "###..###", "########", "########", "##.##.##", "##.##.##", "##....##", "##....##", "##....##", "##....##", "##....##", "........", "........", "........"]}, "N": {"w": 8, "rows": ["........", "........", "##....##", "###...##", "####..##", "####..##", "##.##.##", "##.##.##", "##..####", "##..####", "##...###", "##....##", "##....##", "........", "........", "........"]}, "O": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "P": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##.....", ".##.....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "Q": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##.##..", ".##.##..", "..####..", ".....##.", "........", "........", "........"]}, "R": {"w": 8, "rows": ["........", "........", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".#####..", ".#####..", ".##.##..", ".##.##..", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "S": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", "..####..", "....##..", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "T": {"w": 8, "rows": ["........", "........", ".######.", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "........", "........", "........"]}, "U": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "V": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..#..#..", "..####..", "..####..", "...##...", "........", "........", "........"]}, "W": {"w": 8, "rows": ["........", "........", "##....##", "##....##", "##....##", "##....##", "##....##", "##.##.##", "##.##.##", "########", "########", "###..###", "##....##", "........", "........", "........"]}, "X": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", "..#..#..", "..####..", "...##...", "...##...", "..####..", "..#..#..", ".##..##.", ".##..##.", ".##..##.", "........", "........", "........"]}, "Y": {"w": 8, "rows": ["........", "........", ".##..##.", ".##..##.", ".##..##.", "..#..#..", "..####..", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "........", "........", "........"]}, "Z": {"w": 8, "rows": ["........", "........", ".######.", ".....##.", ".....##.", "....##..", "...##...", "..##....", ".##.....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "0": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##.###.", ".##.###.", ".###.##.", ".###.##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "1": {"w": 8, "rows": ["........", "........", "...##...", "..###...", ".####...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", ".######.", "........", "........", "........"]}, "2": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".....##.", ".....##.", "....##..", "...##...", "..##....", ".##.....", ".##.....", ".##.....", ".######.", "........", "........", "........"]}, "3": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".....##.", ".....##.", "...###..", "...###..", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "4": {"w": 8, "rows": ["........", "........", "....##..", "...###..", "..####..", ".##.##..", ".##.##..", ".##.##..", ".######.", ".######.", "....##..", "....##..", "....##..", "........", "........", "........"]}, "5": {"w": 8, "rows": ["........", "........", ".######.", ".##.....", ".##.....", ".##.....", ".#####..", "..###.##", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}, "6": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##.....", ".##.....", ".#####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "7": {"w": 8, "rows": ["........", "........", ".######.", ".....##.", "....##..", "....##..", "...##...", "...##...", "..##....", "..##....", ".##.....", ".##.....", ".##.....", "........", "........", "........"]}, "8": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", "..####..", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..####..", "........", "........", "........"]}, "9": {"w": 8, "rows": ["........", "........", "..####..", ".##..##.", ".##..##.", ".##..##.", ".##..##.", "..#####.", ".....##.", ".....##.", ".....##.", ".##..##.", "..####..", "........", "........", "........"]}}</script>
@@ -231,8 +281,19 @@
   let W = 8;
   let cells = blank(W);
   let curChar = "A";
+  let paletteData = {};   // char -> rows, sourced from the original bitmap as a fallback
+
+  const HALF_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  function toFullwidth(ch) {
+    const c = ch.charCodeAt(0);
+    if (c >= 65 && c <= 90) return String.fromCodePoint(0xFF21 + (c - 65));
+    if (c >= 48 && c <= 57) return String.fromCodePoint(0xFF10 + (c - 48));
+    return ch;
+  }
+  const FULL_CHARS = Array.from(HALF_CHARS).map(toFullwidth).join("");
   let guidesOn = true;
-  const batch = {};
+  let ghostOn = true;
+  let pvScale = 3, pvCachedText = null, pvCachedItems = null, pvTimer = null;
 
   const gridEl = document.getElementById("grid");
   const guidesEl = document.getElementById("guides");
@@ -265,6 +326,7 @@
     }
     paintAll();
     drawGuides();
+    drawGhost();
   }
   function paintAll() {
     const nodes = gridEl.children;
@@ -337,6 +399,33 @@
     }
   }
 
+  // ---- halfwidth ghost overlay (fullwidth canvas only) ----
+  function toHalfwidth(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0xFF21 && c <= 0xFF3A) return String.fromCodePoint(65 + (c - 0xFF21));
+    if (c >= 0xFF10 && c <= 0xFF19) return String.fromCodePoint(48 + (c - 0xFF10));
+    return null;
+  }
+  function drawGhost() {
+    const cv = document.getElementById("ghost");
+    const px = 22;
+    cv.width = W * px; cv.height = H * px;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!ghostOn || W !== 16) return;
+    const halfCh = toHalfwidth(curChar);
+    if (!halfCh) return;
+    const rows = paletteSource(halfCh);
+    if (!rows) return;
+    const gw = rows[0].length;
+    const dx = Math.floor((W - gw) / 2);          // center the 8px ghost
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < gw; x++)
+        if (rows[y][x] === "#")
+          ctx.fillRect((dx + x) * px, y * px, px, px);
+  }
+
   // ---- preview ----
   function renderTo(canvas, scale) {
     canvas.width = W * scale; canvas.height = H * scale;
@@ -350,27 +439,8 @@
   function updatePreview() {
     renderTo(document.getElementById("pv1"), 1);
     renderTo(document.getElementById("pv2"), 2);
-    renderWord();
-  }
-  function renderWord() {
-    // show current glyph repeated with a couple neighbours for spacing feel
-    const word = ["H", curChar, "x", curChar].map(c => DATA[c] ? DATA[c].rows : null);
-    word[1] = cellsToRows(); word[3] = cellsToRows();
-    const canvas = document.getElementById("pvWord");
-    const scale = 3, gap = 1;
-    let total = 0;
-    const grids = word.map(r => r ? rowsToCells(r) : null);
-    grids.forEach(g => { total += (g ? g[0].length : 4) + gap; });
-    canvas.width = total * scale; canvas.height = H * scale;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-    let px = 0;
-    for (const g of grids) {
-      const w = g ? g[0].length : 4;
-      if (g) for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
-        if (g[y][x]) ctx.fillRect((px + x) * scale, y * scale, scale, scale);
-      px += w + gap;
-    }
+    renderTo(document.getElementById("pv3"), 3);
+    renderTextPreview();
   }
 
   // ---- export ----
@@ -381,22 +451,86 @@
   function updateExport() {
     document.getElementById("exportOne").value = entryText(curChar, cellsToRows());
   }
-  function renderBatch() {
-    const keys = Object.keys(batch);
-    document.getElementById("batchCount").textContent = keys.length;
-    document.getElementById("exportBatch").value =
-      keys.map(k => entryText(k, batch[k])).join("\n");
+
+  // ---- text preview (mixed original + custom rendering) ----
+  function pvIsFullwidth(cp) {
+    // mirrors tools/spacing.py _is_fullwidth
+    return (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x1100 && cp <= 0x11FF) ||
+           (cp >= 0x3130 && cp <= 0x318F) || (cp >= 0x3040 && cp <= 0x30FF) ||
+           (cp >= 0xFF00 && cp <= 0xFFEF);
+  }
+  function pvMetrics(ch, grid) {
+    if (ch === " ") return { advance: 8, shift: 0 };
+    if (!grid || !grid.length) return { advance: 8, shift: 0 };
+    const w = grid[0].length;
+    if (pvIsFullwidth(ch.codePointAt(0))) return { advance: w, shift: 0 };
+    let lo = -1, hi = -1;
+    for (let y = 0; y < grid.length; y++)
+      for (let x = 0; x < w; x++)
+        if (grid[y][x] === "#") { if (lo < 0 || x < lo) lo = x; if (x > hi) hi = x; }
+    if (lo < 0) return { advance: 4, shift: 0 };
+    return { advance: (hi - lo + 1) + 2, shift: 1 - lo };
+  }
+  async function fetchPreviewItems(s) {
+    if (SERVER) {
+      try {
+        const res = await fetch("api/text?s=" + encodeURIComponent(s), { cache: "no-store" });
+        if (res.ok) return (await res.json()).chars;
+      } catch (e) { /* fall through to local */ }
+    }
+    return Array.from(s).map(ch =>
+      ({ ch, rows: DATA[ch] ? DATA[ch].rows : null }));
+  }
+  async function renderTextPreview() {
+    const input = document.getElementById("previewText");
+    const canvas = document.getElementById("pvText");
+    if (!input || !canvas) return;
+    const s = input.value;
+    if (s !== pvCachedText) {
+      pvCachedItems = await fetchPreviewItems(s);
+      pvCachedText = s;
+    }
+    const items = pvCachedItems.map(it =>
+      it.ch === curChar ? { ch: it.ch, rows: cellsToRows() } : it);
+    const ms = items.map(it => Object.assign({}, it, pvMetrics(it.ch, it.rows)));
+    const total = ms.reduce((a, m) => a + m.advance, 0) || 1;
+    canvas.width = total * pvScale;
+    canvas.height = 16 * pvScale;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    let pen = 0;
+    for (const m of ms) {
+      if (m.rows && m.rows.length) {
+        ctx.fillStyle = ink;
+        const w = m.rows[0].length;
+        for (let y = 0; y < 16; y++)
+          for (let x = 0; x < w; x++)
+            if (m.rows[y] && m.rows[y][x] === "#")
+              ctx.fillRect((pen + x + m.shift) * pvScale, y * pvScale, pvScale, pvScale);
+      } else if (m.ch !== " ") {
+        ctx.strokeStyle = ink;
+        ctx.strokeRect((pen + 1) * pvScale + 0.5, 2 * pvScale + 0.5,
+                       6 * pvScale - 1, 11 * pvScale - 1);
+      }
+      pen += m.advance;
+    }
   }
 
   // ---- palette ----
-  function buildPalette() {
-    const pal = document.getElementById("palette");
+  function paletteSource(ch) {
+    return DATA[ch] ? DATA[ch].rows : (paletteData[ch] || null);
+  }
+  function buildPaletteGroup(containerId, chars) {
+    const pal = document.getElementById(containerId);
     pal.innerHTML = "";
-    Object.keys(DATA).sort().forEach(ch => {
+    for (const ch of chars) {
+      const rows = paletteSource(ch);
+      if (!rows) continue;
       const s = document.createElement("button");
       s.className = "swatch"; s.dataset.ch = ch; s.title = ch;
       const cv = document.createElement("canvas");
-      const g = rowsToCells(DATA[ch].rows), w = g[0].length;
+      const g = rowsToCells(rows), w = g[0].length;
       cv.width = w; cv.height = H;
       const ctx = cv.getContext("2d");
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
@@ -405,7 +539,21 @@
       s.appendChild(cv);
       s.addEventListener("click", () => loadChar(ch));
       pal.appendChild(s);
-    });
+    }
+  }
+  function buildPalette() {
+    buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
+    buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
+  }
+  async function loadPaletteData() {
+    try {
+      const res = await fetch("api/text?s=" + encodeURIComponent(HALF_CHARS + FULL_CHARS),
+                              { cache: "no-store" });
+      if (!res.ok) return;
+      const j = await res.json();
+      paletteData = {};
+      for (const item of j.chars) if (item.rows) paletteData[item.ch] = item.rows;
+    } catch (e) { /* offline: palette falls back to customized chars only */ }
   }
   function markPalette() {
     document.querySelectorAll(".swatch").forEach(s =>
@@ -416,8 +564,8 @@
   function loadChar(ch) {
     curChar = ch;
     charInput.value = ch;
-    if (DATA[ch]) {
-      const rows = DATA[ch].rows;
+    const rows = paletteSource(ch);
+    if (rows) {
       setWidth(rows[0].length, true);
       cells = rowsToCells(rows);
     } else {
@@ -456,6 +604,11 @@
     e.currentTarget.setAttribute("aria-pressed", guidesOn);
     drawGuides();
   });
+  document.getElementById("ghostBtn").addEventListener("click", e => {
+    ghostOn = !ghostOn;
+    e.currentTarget.setAttribute("aria-pressed", ghostOn);
+    drawGhost();
+  });
 
   // ---- tools ----
   document.querySelector(".tools").addEventListener("click", e => {
@@ -488,26 +641,30 @@
   }
   document.getElementById("copyOne").addEventListener("click", e =>
     copy(document.getElementById("exportOne").value, e.currentTarget));
-  document.getElementById("addBatch").addEventListener("click", () => {
-    batch[curChar] = cellsToRows(); renderBatch();
+
+  document.getElementById("previewText").addEventListener("input", () => {
+    clearTimeout(pvTimer);
+    pvTimer = setTimeout(renderTextPreview, 150);
   });
-  document.getElementById("copyBatch").addEventListener("click", e => {
-    if (Object.keys(batch).length) copy(document.getElementById("exportBatch").value, e.currentTarget);
-  });
-  document.getElementById("clearBatch").addEventListener("click", () => {
-    for (const k in batch) delete batch[k]; renderBatch();
-  });
+  document.querySelectorAll("[data-pvscale]").forEach(b =>
+    b.addEventListener("click", () => {
+      pvScale = +b.dataset.pvscale;
+      document.querySelectorAll("[data-pvscale]").forEach(x =>
+        x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      renderTextPreview();
+    }));
 
   // ---- server integration ----
   const statusEl = document.getElementById("status");
   const serverRow = document.getElementById("serverRow");
-  const buildLog = document.getElementById("buildLog");
+  const buildBtn = document.getElementById("buildFont");
 
   function setStatus(on, text) {
     SERVER = on;
     statusEl.dataset.on = on ? "true" : "false";
     statusEl.textContent = text;
     serverRow.hidden = !on;
+    buildBtn.hidden = !on;
   }
 
   async function connect() {
@@ -518,11 +675,31 @@
       DATA = {};
       for (const ch in src) DATA[ch] = { rows: src[ch] };
       setStatus(true, "서버 연결됨 · 저장 가능");
+      await loadPaletteData();
       buildPalette();
-      loadChar(DATA[curChar] ? curChar : "A");
+      pvCachedText = null;               // refetch preview with server glyphs
+      loadChar(paletteSource(curChar) ? curChar : "A");
     } catch (e) {
       setStatus(false, "오프라인 · 복사 방식");
     }
+  }
+
+  // ---- toast ----
+  const toastsEl = document.getElementById("toasts");
+  function showToast(message, kind) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.dataset.kind = kind || "info";
+    el.innerHTML = `<span class="dot"></span><span></span>`;
+    el.lastElementChild.textContent = message;
+    toastsEl.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    const life = kind === "error" ? 4200 : 2400;
+    setTimeout(() => {
+      el.classList.remove("show");
+      el.addEventListener("transitionend", () => el.remove(), { once: true });
+      setTimeout(() => el.remove(), 300); // fallback if no transition fires
+    }, life);
   }
 
   async function saveCurrent() {
@@ -531,30 +708,45 @@
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`저장 실패 (${res.status}) ${msg}`.trim());
+    }
     const j = await res.json();
     DATA[curChar] = { rows: cellsToRows() };
     buildPalette(); markPalette();
+    pvCachedText = null;
+    renderTextPreview();
     return j;
   }
 
   document.getElementById("saveOne").addEventListener("click", async e => {
-    const t = e.currentTarget.textContent;
-    await saveCurrent();
-    e.currentTarget.textContent = "저장됨 ✓";
-    setTimeout(() => { e.currentTarget.textContent = t; }, 1200);
+    const btn = e.currentTarget; const t = btn.textContent;
+    btn.disabled = true;
+    try {
+      await saveCurrent();
+      showToast(`저장됨 · ${curChar} (${cpLabel.textContent})`, "success");
+      btn.textContent = "저장됨 ✓";
+    } catch (err) {
+      showToast(String(err.message || err), "error");
+      btn.textContent = "저장 실패";
+    } finally {
+      setTimeout(() => { btn.textContent = t; btn.disabled = false; }, 1200);
+    }
   });
 
-  document.getElementById("saveBuild").addEventListener("click", async e => {
+  document.getElementById("buildFont").addEventListener("click", async e => {
     const btn = e.currentTarget; const t = btn.textContent;
-    btn.disabled = true; btn.textContent = "저장 후 빌드 중…";
-    await saveCurrent();
-    buildLog.textContent = "빌드 중… (수 초)";
+    btn.disabled = true; btn.textContent = "빌드 중…";
+    console.log("[빌드] 시작…");
     try {
       const res = await fetch("api/build", { method: "POST" });
       const j = await res.json();
-      buildLog.textContent = (j.ok ? "빌드 완료 ✓\n" : "빌드 실패\n") + (j.log || "");
+      console.log(`[빌드] ${j.ok ? "완료 ✓" : "실패"}\n${j.log || ""}`);
+      showToast(j.ok ? "빌드 완료 ✓" : "빌드 실패 — 콘솔 확인", j.ok ? "success" : "error");
     } catch (err) {
-      buildLog.textContent = "빌드 요청 실패: " + err;
+      console.error("[빌드] 요청 실패:", err);
+      showToast("빌드 요청 실패", "error");
     }
     btn.disabled = false; btn.textContent = t;
   });
