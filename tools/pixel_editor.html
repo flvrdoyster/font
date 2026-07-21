@@ -100,13 +100,15 @@
     letter-spacing: 0.06em; }
 
   /* palette */
-  .palette { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; }
-  .swatch { aspect-ratio: 1; border: 1px solid var(--faint); border-radius: 6px;
-    background: var(--cell-off); cursor: pointer; padding: 3px; display: grid;
-    place-items: center; }
+  .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px);
+    gap: 5px; max-height: 210px; overflow-y: auto; padding-right: 2px; }
+  .swatch { width: 30px; height: 30px; border: 1px solid var(--faint); border-radius: 6px;
+    background: var(--cell-off); cursor: pointer; padding: 0; display: grid;
+    place-items: center; overflow: hidden; }
   .swatch:hover { border-color: var(--accent); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-  .swatch canvas { image-rendering: pixelated; width: 100%; height: auto; }
+  .swatch canvas { image-rendering: pixelated; max-width: 24px; max-height: 24px;
+    width: auto; height: auto; }
 
   textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.45;
     background: var(--ground); color: var(--ink); border: 1px solid var(--grid-line);
