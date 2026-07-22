@@ -50,6 +50,13 @@
     color: var(--ink); }
   .wtab[aria-selected="true"] .wtab-note { color: var(--accent); }
 
+  .ptab-bar { display: flex; gap: 6px; margin-bottom: 12px; }
+  .ptab { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid var(--grid-line); background: var(--panel);
+    color: var(--muted); cursor: pointer; }
+  .ptab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft);
+    color: var(--ink); }
+
   .tier { max-width: 1080px; margin: 16px auto 0; }
   .tier:first-of-type { margin-top: 0; }
 
@@ -95,7 +102,7 @@
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
   .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
-  .ghost-dotgothic { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
+  .ghost-meiryo { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -212,7 +219,7 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
-    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: DotGothic16(Light 가나/기호만, OFL 참조용)</p>
+    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: Meiryo(Light 가나만, 참조 전용)</p>
 
     <div class="draw-split">
       <div class="draw-canvas">
@@ -221,7 +228,7 @@
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
             <canvas class="ghost-pc98" id="ghostPc98"></canvas>
-            <canvas class="ghost-dotgothic" id="ghostDotGothic"></canvas>
+            <canvas class="ghost-meiryo" id="ghostMeiryo"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
@@ -275,21 +282,32 @@
   <!-- 3. 글자 불러오기 (팔레트) -->
   <section class="card tier">
     <p class="label">글자 불러오기 <span class="hint-inline">초록 = 저장된 확정본, 나머지 = 미리보기 · 현재 웨이트 기준</span></p>
-    <div class="palette-group">
-      <p class="sublabel">반각 A–Z · a–z · 0–9</p>
-      <div class="palette" id="paletteHalf"></div>
+    <div class="ptab-bar" role="tablist" aria-label="팔레트 분류">
+      <button class="ptab" data-cat="latin" role="tab" aria-selected="true">영숫자</button>
+      <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
+      <button class="ptab" data-cat="kana" role="tab" aria-selected="false">가나</button>
     </div>
-    <div class="palette-group">
-      <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９</p>
-      <div class="palette" id="paletteFull"></div>
+    <div class="palette-cat" data-cat="latin">
+      <div class="palette-group">
+        <p class="sublabel">반각 A–Z · a–z · 0–9</p>
+        <div class="palette" id="paletteHalf"></div>
+      </div>
+      <div class="palette-group">
+        <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９</p>
+        <div class="palette" id="paletteFull"></div>
+      </div>
     </div>
-    <div class="palette-group">
-      <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
-      <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
+    <div class="palette-cat" data-cat="hangul" hidden>
+      <div class="palette-group">
+        <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
+        <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
+      </div>
     </div>
-    <div class="palette-group">
-      <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = DotGothic16(OFL) — 모양만 참고, 직접 새로 그립니다</span></p>
-      <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
+    <div class="palette-cat" data-cat="kana" hidden>
+      <div class="palette-group">
+        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = Meiryo — 모양만 참고, 직접 새로 그립니다</span></p>
+        <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
+      </div>
     </div>
   </section>
 
@@ -501,18 +519,22 @@
     }
     if (ch === curChar) drawGhost();
   }
-  // DotGothic16 (SIL OFL 1.1) -- Light-tab-only third overlay, visual
-  // reference only for hand-drawing kana/symbols in our own angular style;
-  // never saved/embedded. Drawn in --guide2 to stay distinct from the grey
-  // Regular ghost and the blue PC-98 overlay.
-  let dotgothicCache = {};
-  async function fetchDotGothic(ch) {
+  // Meiryo -- Light-tab-only third overlay, kana only, visual reference for
+  // hand-drawing kana in our own angular style; never saved/embedded. Drawn
+  // in --guide2 to stay distinct from the grey Regular ghost and the blue
+  // PC-98 overlay.
+  function isKana(ch) {
+    const c = ch.codePointAt(0);
+    return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
+  }
+  let meiryoCache = {};
+  async function fetchMeiryo(ch) {
     try {
-      const res = await fetch("api/dotgothic16?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const res = await fetch("api/meiryo?s=" + encodeURIComponent(ch), { cache: "no-store" });
       const j = await res.json();
-      dotgothicCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+      meiryoCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
     } catch (e) {
-      dotgothicCache[ch] = null;
+      meiryoCache[ch] = null;
     }
     if (ch === curChar) drawGhost();
   }
@@ -553,7 +575,7 @@
       }
     }
     drawPc98Ghost();
-    drawDotGothicGhost();
+    drawMeiryoGhost();
   }
   function drawPc98Ghost() {
     const cv = document.getElementById("ghostPc98");
@@ -578,18 +600,18 @@
         if (rows[y][x] === "#")
           ctx.fillRect((dx + x) * px, y * px, px, px);
   }
-  function drawDotGothicGhost() {
-    const cv = document.getElementById("ghostDotGothic");
+  function drawMeiryoGhost() {
+    const cv = document.getElementById("ghostMeiryo");
     const px = 22;
     cv.width = W * px; cv.height = H * px;
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostOn || WEIGHT !== "light") return;
+    if (!ghostOn || WEIGHT !== "light" || !isKana(curChar)) return;
     let rows;
-    if (curChar in dotgothicCache) {
-      rows = dotgothicCache[curChar];
+    if (curChar in meiryoCache) {
+      rows = meiryoCache[curChar];
     } else {
-      fetchDotGothic(curChar);
+      fetchMeiryo(curChar);
       return;
     }
     if (!rows) return;
@@ -897,6 +919,16 @@
   }
   document.querySelectorAll(".wtab").forEach(b =>
     b.addEventListener("click", () => switchWeight(b.dataset.weight)));
+
+  // ---- palette category tabs ----
+  document.querySelectorAll(".ptab").forEach(b =>
+    b.addEventListener("click", () => {
+      const cat = b.dataset.cat;
+      document.querySelectorAll(".ptab").forEach(x =>
+        x.setAttribute("aria-selected", x === b ? "true" : "false"));
+      document.querySelectorAll(".palette-cat").forEach(el =>
+        el.hidden = el.dataset.cat !== cat);
+    }));
 
   // ---- toast ----
   const toastsEl = document.getElementById("toasts");

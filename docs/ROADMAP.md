@@ -45,15 +45,13 @@
   출력(현재는 TTF까지만).
 - **가나(히라가나·가타카나·반각가타카나, 251자)**: 순서를 당겨 먼저 진행 중. Light부터
   손으로 그린다.
-  - 참조 오버레이(보라색): [DotGothic16](https://github.com/fontworks-fonts/DotGothic16)
-    (SIL OFL 1.1, Fontworks Inc., Reserved Font Name 없음)을 **모양만 참고**하는 용도로만
-    쓴다 — 실제 픽셀 데이터를 이식하지 않고 PC-98 때와 같은 방식(참조 보며 손으로 각진
-    스타일로 새로 그림)이라 저작권 고지 의무가 없다(도안 자체의 저작권 비보호는
-    `docs/PROVENANCE.md` 참고).
-  - 로컬 파일은 `refs/dotgothic16/`(gitignore 대상, PC-98의 `gensei-pc98`처럼 재현
-    가능한 외부 참조물이라 커밋 안 함). 필요 시 재획득:
-    `https://github.com/google/fonts/tree/main/ofl/dotgothic16`
-  - 에디터: `/api/kana`(글자 목록), `/api/dotgothic16`(참조 렌더, Light 탭 전용)
+  - 참조 오버레이(보라색, 가나 전용): Meiryo. 사용자의 Microsoft Office 설치본
+    (`/Applications/Microsoft Word.app/.../DFonts/meiryo.ttc`)에서 **그 자리에서
+    읽기만** 하고 저장소엔 복사·커밋하지 않는다 — 라이선스 재배포 문제 없이 로컬
+    참조 전용으로만 쓴다. **모양만 참고**하고 실제 픽셀 데이터는 이식하지 않으며
+    PC-98 때와 같은 방식(참조 보며 손으로 각진 스타일로 새로 그림)이라 저작권 고지
+    의무도 없다(도안 자체의 저작권 비보호는 `docs/PROVENANCE.md` 참고).
+  - 에디터: `/api/kana`(글자 목록), `/api/meiryo`(참조 렌더, Light 탭·가나 전용)
 - **반각 한글 98자**: 미착수.
 - (원본 약물/기호 결손분 신규 드로잉도 필요 시 여기서 함 — `coverage_report.py` 목록.)
 

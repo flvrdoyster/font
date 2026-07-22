@@ -29,11 +29,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              for the editor's full-coverage Light palette.
   GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
                              list), for the editor's kana palette (Phase 3).
-  GET  /api/dotgothic16?s=..
-                          -> per-char grids rasterized from DotGothic16 (SIL
-                             OFL 1.1, refs/dotgothic16/) at its native 16px
-                             size. Reference-only overlay for hand-drawing
-                             kana/symbols -- never embedded in built output.
+  GET  /api/meiryo?s=..   -> per-char grids rasterized from Meiryo (read live
+                             from the local Office install, never copied into
+                             the repo) at its native 16px size. Kana only,
+                             reference-only overlay -- never embedded in
+                             built output.
   POST /api/build?weight=regular|light
                           -> rebuild that weight's TTF (build_ufo -> fontmake
                              -> finalize). regular = full original-bitmap
@@ -251,27 +251,37 @@ def ks2350_chars():
         return []
 
 
-_DOTGOTHIC16 = None  # lazy freetype Face
-DOTGOTHIC16_TTF = os.path.join(ROOT, "refs", "dotgothic16", "DotGothic16-Regular.ttf")
-DOTGOTHIC16_BASELINE_ROW = 13   # matches the editor's baseline guide row
+_MEIRYO = None  # lazy freetype Face
+# Read in place from the user's own Microsoft Office install -- never copied
+# into the repo. Local reference use only (never embedded in built output),
+# so this doesn't redistribute Meiryo's (non-free) license in any way.
+MEIRYO_TTC = ("/Applications/Microsoft Word.app/Contents/Resources/DFonts/meiryo.ttc")
+MEIRYO_FACE_INDEX = 0   # "Meiryo Regular" (the .ttc also has Italic + "Meiryo UI" faces)
+KANA_BASELINE_ROW = 13   # matches the editor's baseline guide row
 
 
-def _dotgothic16():
-    """DotGothic16 (SIL OFL 1.1, The DotGothic16 Project Authors / Fontworks
-    Inc.) -- a visual-only reference overlay for hand-drawing kana/symbols in
-    our own style. Never embedded in built output; see refs/dotgothic16/OFL.txt."""
-    global _DOTGOTHIC16
-    if _DOTGOTHIC16 is None:
+def _is_kana(ch):
+    return (0x3041 <= ord(ch) <= 0x30FF) or (0xFF61 <= ord(ch) <= 0xFF9F)
+
+
+def _meiryo():
+    """Meiryo Regular, read directly from the licensed Office install -- a
+    visual-only reference overlay for hand-drawing kana in our own style.
+    Never embedded in built output, kana only."""
+    global _MEIRYO
+    if _MEIRYO is None:
         import freetype
-        face = freetype.Face(DOTGOTHIC16_TTF)
+        face = freetype.Face(MEIRYO_TTC, MEIRYO_FACE_INDEX)
         face.set_pixel_sizes(16, 16)
-        _DOTGOTHIC16 = face
-    return _DOTGOTHIC16
+        _MEIRYO = face
+    return _MEIRYO
 
 
-def _dotgothic16_grid(ch):
+def _meiryo_grid(ch):
+    if not _is_kana(ch):
+        return None
     try:
-        face = _dotgothic16()
+        face = _meiryo()
     except Exception:
         return None
     import freetype
@@ -285,7 +295,7 @@ def _dotgothic16_grid(ch):
     bmp = slot.bitmap
     grid = [["."] * 16 for _ in range(16)]
     for y in range(bmp.rows):
-        gy = DOTGOTHIC16_BASELINE_ROW - slot.bitmap_top + y
+        gy = KANA_BASELINE_ROW - slot.bitmap_top + y
         if not (0 <= gy < 16):
             continue
         for x in range(bmp.width):
@@ -298,10 +308,10 @@ def _dotgothic16_grid(ch):
     return ["".join(row) for row in grid]
 
 
-def dotgothic16_grids(s):
-    """Per-char pixel grids rasterized from DotGothic16 at its native 16px
-    size, roughly aligned to our baseline row. Reference overlay only."""
-    return [{"ch": ch, "rows": _dotgothic16_grid(ch)} for ch in s]
+def meiryo_grids(s):
+    """Per-char pixel grids rasterized from Meiryo at its native 16px size,
+    roughly aligned to our baseline row. Kana only, reference overlay only."""
+    return [{"ch": ch, "rows": _meiryo_grid(ch)} for ch in s]
 
 
 def kana_chars():
@@ -367,9 +377,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
                                               ensure_ascii=False))
-        if parsed.path == "/api/dotgothic16":
+        if parsed.path == "/api/meiryo":
             s = qs.get("s", [""])[0]
-            return self._send(200, json.dumps({"chars": dotgothic16_grids(s)},
+            return self._send(200, json.dumps({"chars": meiryo_grids(s)},
                                               ensure_ascii=False))
         if parsed.path == "/api/kana":
             return self._send(200, json.dumps({"chars": kana_chars()},
