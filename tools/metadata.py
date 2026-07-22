@@ -9,7 +9,7 @@ FAMILY = "Dokkaebi DNR Gothic"
 FAMILY_KO = "도깨비DNR 고딕"
 RFN = "Dokkaebi DNR"                     # OFL Reserved Font Name
 RIBBI = {"Regular", "Bold", "Italic", "Bold Italic"}
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 VENDOR_ID = "FDoy"                       # OS/2 achVendID (<=4 chars)
 DESIGNER = "flvrdoyster"
 
@@ -50,7 +50,13 @@ def apply(ufo, ascender, descender, cap_height, x_height, style="Regular"):
         info.styleName = "Regular"
         info.styleMapFamilyName = f"{FAMILY} {style}"
         info.styleMapStyleName = "regular"
-    v_major, v_minor = (int(x) for x in VERSION.split(".")[:2])
+    # versionMajor/versionMinor -> head.fontRevision = major + minor/1000 (UFO
+    # spec: versionMinor is thousandths, 0-999), so it must match nameID5
+    # ("Version {VERSION}") numerically. "1" alone would mean .001, not .1 --
+    # left-justify the minor digits into that 3-digit scale ("1" -> 100 -> .1).
+    major_str, minor_str = VERSION.split(".")[:2]
+    v_major = int(major_str)
+    v_minor = int(minor_str.ljust(3, "0"))
     info.versionMajor = v_major
     info.versionMinor = v_minor
 
