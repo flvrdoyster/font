@@ -7,8 +7,8 @@ since UFO localized names are awkward to carry through the pipeline.
 
 FAMILY = "Dokkaebi DNR Gothic"
 FAMILY_KO = "도깨비DNR 고딕"
-STYLE = "Regular"
 RFN = "Dokkaebi DNR"                     # OFL Reserved Font Name
+RIBBI = {"Regular", "Bold", "Italic", "Bold Italic"}
 VERSION = "0.1.0"
 VENDOR_ID = "FDoy"                       # OS/2 achVendID (<=4 chars)
 DESIGNER = "flvrdoyster"
@@ -35,12 +35,21 @@ LICENSE_URL = "https://openfontlicense.org"
 GASP_RECORDS = [{"rangeMaxPPEM": 65535, "rangeGaspBehavior": [1, 3]}]
 
 
-def apply(ufo, ascender, descender, cap_height, x_height):
+def apply(ufo, ascender, descender, cap_height, x_height, style="Regular"):
     info = ufo.info
-    info.familyName = FAMILY
-    info.styleName = STYLE
-    info.styleMapFamilyName = FAMILY
-    info.styleMapStyleName = "regular"
+    if style in RIBBI:
+        info.familyName = FAMILY
+        info.styleName = style
+        info.styleMapFamilyName = FAMILY
+        info.styleMapStyleName = style.lower()
+    else:
+        # Non-RIBBI style (e.g. "Light"): fold into the legacy family name so
+        # 4-style OS matching still works; nameID 16/17 (preferred family/
+        # subfamily) carry the true "Dokkaebi DNR Gothic" / "Light" pair.
+        info.familyName = f"{FAMILY} {style}"
+        info.styleName = "Regular"
+        info.styleMapFamilyName = f"{FAMILY} {style}"
+        info.styleMapStyleName = "regular"
     v_major, v_minor = (int(x) for x in VERSION.split(".")[:2])
     info.versionMajor = v_major
     info.versionMinor = v_minor
@@ -52,14 +61,14 @@ def apply(ufo, ascender, descender, cap_height, x_height):
     info.openTypeNameLicenseURL = LICENSE_URL
     info.openTypeNameVersion = f"Version {VERSION}"
     # Reserved Font Name lives in the preferred family; keep unique-ID clean.
-    info.openTypeNameUniqueID = f"{FAMILY} {VERSION}; {VENDOR_ID}"
+    info.openTypeNameUniqueID = f"{FAMILY} {style} {VERSION}; {VENDOR_ID}"
     info.openTypeNamePreferredFamilyName = FAMILY
-    info.openTypeNamePreferredSubfamilyName = STYLE
+    info.openTypeNamePreferredSubfamilyName = style
 
     # OS/2
     info.openTypeOS2VendorID = VENDOR_ID
     info.openTypeOS2Type = []              # fsType 0 = installable embedding
-    info.openTypeOS2WeightClass = 400
+    info.openTypeOS2WeightClass = 300 if style == "Light" else 400
     info.openTypeOS2WidthClass = 5
 
     # Vertical metrics (baseline at bottom of the 16px cell; no descenders by

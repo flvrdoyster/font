@@ -122,6 +122,8 @@
 
   /* palette */
   .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 5px; }
+  .palette-scroll { max-height: 320px; overflow-y: auto; border: 1px solid var(--faint);
+    border-radius: 8px; padding: 8px; }
   .swatch { width: 30px; height: 30px; border: 1px solid var(--faint); border-radius: 6px;
     background: var(--cell-off); cursor: pointer; padding: 0; display: grid;
     place-items: center; overflow: hidden; }
@@ -289,6 +291,10 @@
       <p class="sublabel">겹받침 참조 음절 (11종 × 블록타입, 17자) <span class="hint-inline">세로/복합모음(VX)과 가로모음(H)만 구분해 그립니다</span></p>
       <div class="palette" id="paletteCluster"></div>
     </div>
+    <div class="palette-group weight-only" data-weight="light">
+      <p class="sublabel">완성형 전체 (KS X 1001, 2,350자) <span class="hint-inline">기본값은 조합 결과이며, 개별 글자를 직접 다듬어 저장할 수 있습니다</span></p>
+      <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
+    </div>
     <!-- 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
   </section>
 
@@ -325,6 +331,16 @@
   const JAMO_REF_CHARS = "가각고곡과곽까깍꼬꼭꽈꽉나낙노녹놔놘다닥도독돠돤따딱또똑똬똴라락로록롸롼마막모목뫄뫈바박보복봐봔빠빡뽀뽁뾔사삭소속솨솩싸싹쏘쏙쏴쏵아악오옥와왁자작조족좌좍짜짝쪼쪽쫘쫙차착초촉촤촨카칵코콕콰콱타탁토톡톼퇀파팍포폭퐈퐝하학호혹화확엮솎안온완얻곧알올왈암옴왐압옵왑앗옷왓았왔앙옹왕엊읒갗옻엌읔앝읕앞읖얗읗";
   // 겹받침(11종) × 블록타입 최소 대표 세트. V/X는 받침 위치가 같아 병합, H만 별도 → 17자.
   const JAMO_CLUSTER_CHARS = "넋몫앉많꼲갉굵갊곪넓곬핥홅읊닳곯값";
+  // KS X 1001 완성형 2,350자 전체 -- 서버의 /api/ks2350에서 채워짐 (정적 리터럴이 아님).
+  let KS2350_CHARS = [];
+  async function fetchKs2350() {
+    if (KS2350_CHARS.length) return;
+    try {
+      const res = await fetch("api/ks2350", { cache: "no-store" });
+      const j = await res.json();
+      KS2350_CHARS = j.chars || [];
+    } catch (e) { KS2350_CHARS = []; }
+  }
   let guidesOn = true;
   let ghostOn = true;
   let pvScale = 3, pvCachedText = null, pvCachedItems = null, pvTimer = null;
@@ -640,15 +656,18 @@
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
     buildPaletteGroup("paletteJamoRef", Array.from(JAMO_REF_CHARS));
     buildPaletteGroup("paletteCluster", Array.from(JAMO_CLUSTER_CHARS));
+    buildPaletteGroup("paletteAll2350", KS2350_CHARS);
   }
   async function loadPaletteData() {
     paletteData = {};
-    // Latin palette groups are always Regular; the jamo-reference group is
-    // always Light -- each fetched with its own weight regardless of which
-    // tab is currently active, so switching tabs never has to re-fetch.
+    // Latin palette groups are always Regular; the jamo groups are always
+    // Light -- each fetched with its own weight regardless of which tab is
+    // currently active, so switching tabs never has to re-fetch. The 2,350
+    // group's default is the server's composed PC-98+consonant preview, not
+    // the raw original (see editor_server.py text_grids).
     const jobs = [
       ["regular", HALF_CHARS + FULL_CHARS],
-      ["light", JAMO_REF_CHARS + JAMO_CLUSTER_CHARS],
+      ["light", JAMO_REF_CHARS + JAMO_CLUSTER_CHARS + KS2350_CHARS.join("")],
     ];
     for (const [weight, chars] of jobs) {
       try {
@@ -785,6 +804,7 @@
     try {
       DATA = await fetchWeightData(WEIGHT);
       setStatus(true, "서버 연결됨 · 저장 가능");
+      await fetchKs2350();
       await loadPaletteData();
       buildPalette();
       pvCachedText = null;               // refetch preview with server glyphs

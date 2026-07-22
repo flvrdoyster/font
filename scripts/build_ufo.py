@@ -1,12 +1,14 @@
 """Build the 도깨비DNR 고딕 UFO from HANKBC bitmaps + custom glyph overrides.
 
 Usage:
-  python scripts/build_ufo.py [--subset "text..."]   # subset for quick checks
-  python scripts/build_ufo.py --all --proportional   # full font
+  python scripts/build_ufo.py [--subset "text..."]        # subset for quick checks
+  python scripts/build_ufo.py --all --proportional        # full Regular font
+  python scripts/build_ufo.py --weight light --proportional  # Light font
 
-Writes build/DokkaebiDNRGothic.ufo. Compile with fontmake separately.
+Writes build/DokkaebiDNRGothic(Light).ufo. Compile with fontmake separately.
 """
 import argparse
+import json
 import sys
 from fontTools.ttLib import TTFont
 import ufoLib2
@@ -17,6 +19,8 @@ import pixelfont as pf
 import spacing as sp
 import metadata as md
 import customglyphs as cg
+import thin_vertical as tv
+import compose_light as cl   # sibling script; scripts/ is sys.path[0] when run directly
 
 UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
@@ -83,6 +87,59 @@ def build(chars=None, all_glyphs=False, proportional=False):
     return ufo
 
 
+def build_light(proportional=False):
+    """Light weight: Latin/numbers = Regular's hand-drawn glyphs mechanically
+    thinned to 1px stems; Hangul = the composed PC-98-base + our-consonants
+    result for the 2,350 KS X 1001 syllables gensei-pc98 needs (see
+    docs/ROADMAP.md Phase 2 -- this is the deliverable's actual scope, not all
+    11,172 Hangul)."""
+    ufo = ufoLib2.Font()
+    ufo.info.unitsPerEm = UPEM
+    md.apply(ufo, ascender=ASCENDER, descender=DESCENDER,
+             cap_height=11 * pf.PX, x_height=7 * pf.PX, style="Light")
+    _add_notdef(ufo)
+    _add_space(ufo, {})
+
+    latin_src = cg.load_src()
+    light_latin_src = {ch: tv.thin_vertical(grid) for ch, grid in latin_src.items()}
+    light_latin = cg.build(light_latin_src)
+
+    with open(cl.REFS, encoding="utf-8") as f:
+        refs = json.load(f)
+    pc98 = cl.load_pc98()
+    cho_ref, jong_ref = cl.build_indices(refs)
+    ks = cl.ks_x1001_order()
+    composable = [ch for ch in ks if cl.can_compose(ch, cho_ref, jong_ref)]
+    light_hangul_src = {ch: cl.compose(ch, pc98, refs, cho_ref, jong_ref)
+                        for ch in composable}
+    light_hangul = cg.build(light_hangul_src)
+
+    missing = len(ks) - len(composable)
+    if missing:
+        skipped = "".join(ch for ch in ks if ch not in light_hangul_src)[:30]
+        print(f"  light: {missing}/{len(ks)} KS X 1001 Hangul skipped "
+              f"(missing consonant/vowel refs): {skipped}...")
+
+    added = 0
+    for cp, (width_px, rows) in {**light_latin, **light_hangul}.items():
+        adv_px, shift_px = (sp.proportional(width_px, rows, cp) if proportional
+                            else ((width_px if width_px else 8), 0))
+        glyph = Glyph(name=f"uni{cp:04X}")
+        glyph.width = adv_px * pf.PX
+        glyph.unicodes = [cp]
+        contours = pf.pixels_to_contours(width_px, rows)
+        if shift_px:
+            dx = shift_px * pf.PX
+            contours = [[(x + dx, y) for x, y in c] for c in contours]
+        _draw(glyph, contours)
+        ufo.addGlyph(glyph)
+        added += 1
+
+    print(f"  light: {added} glyphs added "
+          f"({len(light_latin)} Latin/numbers thinned, {len(light_hangul)} Hangul composed)")
+    return ufo
+
+
 def _draw(glyph, contours):
     pen = glyph.getPen()
     for contour in contours:
@@ -125,16 +182,22 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--proportional", action="store_true",
                     help="derive proportional advances from pixel ink bounds")
-    ap.add_argument("--out", default="build/DokkaebiDNRGothic.ufo")
+    ap.add_argument("--weight", choices=["regular", "light"], default="regular")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    if args.all:
+    if args.weight == "light":
+        ufo = build_light(proportional=args.proportional)
+        out = args.out or "build/DokkaebiDNRGothicLight.ufo"
+    elif args.all:
         ufo = build(all_glyphs=True, proportional=args.proportional)
+        out = args.out or "build/DokkaebiDNRGothic.ufo"
     else:
         text = args.subset or "안녕하세요세계 다람쥐헌쳇바퀴 Hello, World! 0123456789 @#&"
         ufo = build(chars=set(text), proportional=args.proportional)
-    ufo.save(args.out, overwrite=True)
-    print(f"wrote {args.out} with {len(ufo)} glyphs")
+        out = args.out or "build/DokkaebiDNRGothic.ufo"
+    ufo.save(out, overwrite=True)
+    print(f"wrote {out} with {len(ufo)} glyphs")
 
 
 if __name__ == "__main__":

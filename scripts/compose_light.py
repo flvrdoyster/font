@@ -66,7 +66,9 @@ def jong_bt(jung):
 
 # ---- pixel grids as list[str] of '#'/'.' ------------------------------------
 
-def _load_pc98():
+def load_pc98():
+    """A ch -> 16-row grid function reading the PC-98 BIOS font, cached.
+    Public: reused by scripts/build_ufo.py's Light build."""
     from PIL import Image
     px = Image.open(BMP).convert("L").load()
     cells = json.load(open(PC98_MAP, encoding="utf-8"))["cells"]
@@ -106,6 +108,45 @@ def jong_zone(target, pc98):
     return zone
 
 
+CLUSTER_JONG = set("ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ")
+
+
+def build_indices(refs):
+    """Index a {char: rows} reference set by (초성, block type) and (종성,
+    block type). Plain/single-jong references win over cluster ones when both
+    exist for the same slot (sort key), so a cluster reference never displaces
+    a more common plain one."""
+    cho_ref, jong_ref = {}, {}
+    for ch in sorted(refs, key=lambda c: (decompose(c)[2] in CLUSTER_JONG, c)):
+        cho, jung, jong = decompose(ch)
+        cho_ref.setdefault((cho, cho_bt(jung, jong)), ch)
+        if jong:
+            jong_ref.setdefault((jong, jong_bt(jung)), ch)
+    return cho_ref, jong_ref
+
+
+def ks_x1001_order():
+    """The 2,350 KS X 1001 완성형 syllables, in EUC-KR code order."""
+    out = []
+    for hi in range(0xB0, 0xC9):
+        for lo in range(0xA1, 0xFF):
+            try:
+                ch = bytes([hi, lo]).decode("euc-kr")
+            except UnicodeDecodeError:
+                continue
+            if 0xAC00 <= ord(ch) <= 0xD7A3:
+                out.append(ch)
+    return out
+
+
+def can_compose(ch, cho_ref, jong_ref):
+    """Whether build_indices(refs) covers every part ch needs."""
+    cho, jung, jong = decompose(ch)
+    if (cho, cho_bt(jung, jong)) not in cho_ref:
+        return False
+    return not jong or (jong, jong_bt(jung)) in jong_ref
+
+
 def compose(target, pc98, refs, cho_ref, jong_ref):
     cho, jung, jong = decompose(target)
     out = [list(row) for row in pc98(target)]
@@ -133,29 +174,10 @@ def main():
     ap.add_argument("--specimen", action="store_true")
     args = ap.parse_args()
 
-    pc98 = _load_pc98()
+    pc98 = load_pc98()
     refs = json.load(open(REFS, encoding="utf-8"))
-
-    # index our references by consonant + block type (prefer single-jong / plain
-    # references over cluster ones, which appear later after sorting by length)
-    cho_ref, jong_ref = {}, {}
-    for ch in sorted(refs, key=lambda c: (decompose(c)[2] in
-                     set("ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ"), c)):
-        cho, jung, jong = decompose(ch)
-        cho_ref.setdefault((cho, cho_bt(jung, jong)), ch)
-        if jong:
-            jong_ref.setdefault((jong, jong_bt(jung)), ch)
-
-    # the 2,350 KS X 1001 syllables (EUC-KR order)
-    ks = []
-    for hi in range(0xB0, 0xC9):
-        for lo in range(0xA1, 0xFF):
-            try:
-                c = bytes([hi, lo]).decode("euc-kr")
-            except UnicodeDecodeError:
-                continue
-            if 0xAC00 <= ord(c) <= 0xD7A3:
-                ks.append(c)
+    cho_ref, jong_ref = build_indices(refs)
+    ks = ks_x1001_order()
 
     composed = {ch: compose(ch, pc98, refs, cho_ref, jong_ref) for ch in ks}
 

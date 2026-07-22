@@ -18,12 +18,15 @@ WIN, KO = 3, 0x0412   # Windows platform, Korean (Korea) language
 def finalize(path):
     font = TTFont(path)
     name = font["name"]
+    # Style/weight name (e.g. "Regular", "Light") isn't localized -- keep
+    # whatever fontmake already baked from the UFO's style name.
+    style = (name.getDebugName(17) or name.getDebugName(2) or "Regular")
     # nameID -> Korean string
     ko = {
         1: md.FAMILY_KO,
-        2: md.STYLE,
+        2: style,
         16: md.FAMILY_KO,
-        17: md.STYLE,
+        17: style,
     }
     for nid, val in ko.items():
         name.setName(val, nid, WIN, 1, KO)   # platEncID 1 (Unicode BMP)

@@ -11,7 +11,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                           -> merge { "A": [rows], ... } into that file
   GET  /api/text?weight=..&s=...
                           -> per-char grids, custom (that weight) overrides
-                             original (preview)
+                             original (preview). For weight=light Hangul with
+                             no custom entry, falls back to the composed
+                             PC-98-base + our-consonants default (see
+                             scripts/compose_light.py) instead of the raw
+                             original, before finally falling back to that.
   GET  /api/original?s=.. -> per-char grids from the ORIGINAL bitmap only,
                              ignoring custom overrides (weight-independent --
                              it's always the 2px Dokkaebi Dinaru source used as
@@ -21,10 +25,13 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              the 2,350 KS X 1001 Hangul it carries, via the
                              recorded tools/pc98_hangul_map.json. Weight-
                              independent; a second skeleton-reference overlay.
-  POST /api/build?weight=regular
-                          -> rebuild TTF (build_ufo -> fontmake -> finalize).
-                             Regular only for now; Light has no build pipeline
-                             yet (see docs/ROADMAP.md Phase 2).
+  GET  /api/ks2350        -> the 2,350 KS X 1001 완성형 syllables (char list),
+                             for the editor's full-coverage Light palette.
+  POST /api/build?weight=regular|light
+                          -> rebuild that weight's TTF (build_ufo -> fontmake
+                             -> finalize). regular = full original-bitmap
+                             font; light = thinned Latin/numbers + composed
+                             KS X 1001 Hangul (scripts/compose_light.py).
 
 Stdlib only. Run from the repo root.
 """
@@ -97,17 +104,52 @@ def _original_grid(ch, strike, cmap):
     return None
 
 
+_COMPOSER = False  # False = not yet loaded; None = load failed; else the module
+
+
+def _composer():
+    """scripts/compose_light.py, importable from here for the Light Hangul
+    default preview (see text_grids). None if it can't be loaded (e.g. PIL or
+    the PC-98 bitmap missing) -- callers fall back to the plain original."""
+    global _COMPOSER
+    if _COMPOSER is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "scripts"))
+            import compose_light
+            _COMPOSER = compose_light
+        except Exception:
+            _COMPOSER = None
+    return _COMPOSER
+
+
 def text_grids(weight, s):
     """Per-char pixel grids for preview: custom glyphs (for this weight)
-    override the original."""
+    override the original. For Light-weight Hangul with no custom entry yet,
+    fall back to the composed PC-98-base + our-consonants default (see
+    scripts/compose_light.py) instead of the raw 2px original, since that's
+    what the glyph will actually become."""
     custom = read_glyphs(weight)
     try:
         strike, cmap = _orig()
     except Exception:
         strike, cmap = {}, {}
+    cl = None
+    cho_ref = jong_ref = None
+    if weight == "light":
+        cl = _composer()
+        if cl is not None:
+            cho_ref, jong_ref = cl.build_indices(custom)
     out = []
     for ch in s:
-        grid = custom.get(ch) or _original_grid(ch, strike, cmap)
+        grid = custom.get(ch)
+        if grid is None and cl is not None and 0xAC00 <= ord(ch) <= 0xD7A3:
+            try:
+                if cl.can_compose(ch, cho_ref, jong_ref):
+                    grid = cl.compose(ch, _pc98_grid, custom, cho_ref, jong_ref)
+            except Exception:
+                grid = None
+        if grid is None:
+            grid = _original_grid(ch, strike, cmap)
         out.append({"ch": ch, "rows": grid})
     return out
 
@@ -163,6 +205,15 @@ def pc98_grids(s):
     return [{"ch": ch, "rows": _pc98_grid(ch)} for ch in s]
 
 
+def ks2350_chars():
+    """The 2,350 KS X 1001 완성형 syllables, in EUC-KR order (same order as
+    tools/pc98_hangul_map.json's cells) -- the full-coverage Light palette."""
+    try:
+        return list(_pc98()[1].keys())
+    except Exception:
+        return []
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         payload = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -206,6 +257,9 @@ class Handler(BaseHTTPRequestHandler):
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": pc98_grids(s)},
                                               ensure_ascii=False))
+        if parsed.path == "/api/ks2350":
+            return self._send(200, json.dumps({"chars": ks2350_chars()},
+                                              ensure_ascii=False))
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
@@ -226,24 +280,34 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"saved": list(incoming), "total": len(data)}))
         if parsed.path == "/api/build":
             weight = self._weight_qs(qs)
-            if weight != "regular":
-                return self._send(400, json.dumps({
-                    "ok": False,
-                    "log": "Light 웨이트는 아직 빌드 파이프라인이 없습니다 (docs/ROADMAP.md Phase 2 참고).",
-                }, ensure_ascii=False))
-            ok, log = run_build()
+            ok, log = run_build(weight)
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "log": log}))
         self._send(404, json.dumps({"error": "not found"}))
 
 
-def run_build():
+BUILD_TARGETS = {
+    "regular": {
+        "ufo": "build/DokkaebiDNRGothic.ufo",
+        "ttf": "build/DokkaebiDNRGothic.ttf",
+        "build_args": ["--all"],
+    },
+    "light": {
+        "ufo": "build/DokkaebiDNRGothicLight.ufo",
+        "ttf": "build/DokkaebiDNRGothicLight.ttf",
+        "build_args": ["--weight", "light"],
+    },
+}
+
+
+def run_build(weight):
+    target = BUILD_TARGETS.get(weight, BUILD_TARGETS["regular"])
     py = sys.executable
     steps = [
-        [py, "scripts/build_ufo.py", "--all", "--proportional",
-         "--out", "build/DokkaebiDNRGothic.ufo"],
-        [py, "-m", "fontmake", "-u", "build/DokkaebiDNRGothic.ufo",
-         "-o", "ttf", "--output-path", "build/DokkaebiDNRGothic.ttf"],
-        [py, "scripts/finalize.py", "build/DokkaebiDNRGothic.ttf"],
+        [py, "scripts/build_ufo.py", *target["build_args"], "--proportional",
+         "--out", target["ufo"]],
+        [py, "-m", "fontmake", "-u", target["ufo"],
+         "-o", "ttf", "--output-path", target["ttf"]],
+        [py, "scripts/finalize.py", target["ttf"]],
     ]
     out = []
     for cmd in steps:
@@ -263,7 +327,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://localhost:{args.port}/"
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
-    print(f"  editing tools/glyphs_regular.json / glyphs_light.json  ·  POST /api/build?weight=regular to rebuild")
+    print(f"  editing tools/glyphs_regular.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
     if not args.no_open:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

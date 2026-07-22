@@ -78,7 +78,7 @@ if __name__ == '__main__':
     here = os.path.dirname(os.path.abspath(__file__))
 
     # --- sanity check on our own Latin (known ground truth) ---
-    glyphs = json.load(open(os.path.join(here, 'glyphs.json'), encoding='utf-8'))
+    glyphs = json.load(open(os.path.join(here, 'glyphs_regular.json'), encoding='utf-8'))
     for ch in ['A', 'H', 'a', 'o', 'm']:
         thinned = thin_vertical(glyphs[ch])
         print(f'=== {ch} (Latin, thinned) ===')
