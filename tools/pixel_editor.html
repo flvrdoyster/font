@@ -93,8 +93,8 @@
   .grid.showgrid .cell { border-right: 1px solid var(--grid-line);
     border-bottom: 1px solid var(--grid-line); }
 
-  .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.18; }
-  .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.32; }
+  .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
+  .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -285,6 +285,10 @@
       <p class="sublabel">조합형 참조 음절 (초성 19×6 + 홑받침 16×3, 149자) <span class="hint-inline">모음과 함께 그려 초성·종성 형태를 잡습니다</span></p>
       <div class="palette" id="paletteJamoRef"></div>
     </div>
+    <div class="palette-group weight-only" data-weight="light">
+      <p class="sublabel">겹받침 참조 음절 (11종 × 블록타입, 17자) <span class="hint-inline">세로/복합모음(VX)과 가로모음(H)만 구분해 그립니다</span></p>
+      <div class="palette" id="paletteCluster"></div>
+    </div>
     <!-- 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
   </section>
 
@@ -319,6 +323,8 @@
   // + 홑받침 16 x 받침형 3(VC/HC/XC) 대표 음절 (중복 제거, 39자 추가) = 149자
   // (초성 쪽 ㅃ+XC, 받침 쪽 9개 조합은 KS X 1001 완성형에 실례가 없어 제외)
   const JAMO_REF_CHARS = "가각고곡과곽까깍꼬꼭꽈꽉나낙노녹놔놘다닥도독돠돤따딱또똑똬똴라락로록롸롼마막모목뫄뫈바박보복봐봔빠빡뽀뽁뾔사삭소속솨솩싸싹쏘쏙쏴쏵아악오옥와왁자작조족좌좍짜짝쪼쪽쫘쫙차착초촉촤촨카칵코콕콰콱타탁토톡톼퇀파팍포폭퐈퐝하학호혹화확엮솎안온완얻곧알올왈암옴왐압옵왑앗옷왓았왔앙옹왕엊읒갗옻엌읔앝읕앞읖얗읗";
+  // 겹받침(11종) × 블록타입 최소 대표 세트. V/X는 받침 위치가 같아 병합, H만 별도 → 17자.
+  const JAMO_CLUSTER_CHARS = "넋몫앉많꼲갉굵갊곪넓곬핥홅읊닳곯값";
   let guidesOn = true;
   let ghostOn = true;
   let pvScale = 3, pvCachedText = null, pvCachedItems = null, pvTimer = null;
@@ -633,6 +639,7 @@
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
     buildPaletteGroup("paletteJamoRef", Array.from(JAMO_REF_CHARS));
+    buildPaletteGroup("paletteCluster", Array.from(JAMO_CLUSTER_CHARS));
   }
   async function loadPaletteData() {
     paletteData = {};
@@ -641,7 +648,7 @@
     // tab is currently active, so switching tabs never has to re-fetch.
     const jobs = [
       ["regular", HALF_CHARS + FULL_CHARS],
-      ["light", JAMO_REF_CHARS],
+      ["light", JAMO_REF_CHARS + JAMO_CLUSTER_CHARS],
     ];
     for (const [weight, chars] of jobs) {
       try {

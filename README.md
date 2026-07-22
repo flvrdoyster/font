@@ -1,51 +1,39 @@
 # 도깨비DNR 고딕 / Dokkaebi DNR Gothic
 
-**도깨비 디나루** 16×16 비트맵 글꼴을 출발점으로, 픽셀(계단) 미학을 그대로 보존한
-**비례폭 픽셀 파생 서체**. 자동 변환된 픽셀-정확 벡터 베이스 위에서 글자 다듬기·커버리지
-확장·자폭 재설계를 진행한다.
+**도깨비 디나루** 16×16 비트맵 글꼴을 Regular(2px 줄기)·Light(1px 줄기) 두 웨이트를
+가진 현대적 픽셀 스타일 서체로 다듬는 프로젝트다. Light 웨이트는 완성 후
+[gensei-pc98](../../gensei-pc98) PC-98 에뮬레이터 프로젝트의 실제 한글 폰트로
+삽입한다 — 원본 발굴·복원에서 그치지 않고 실사용 산출물을 목표로 한다.
 
-> 이름에 대하여: "도깨비 디나루"(원본)와 "도깨비 고딕체"(역사적 별개 글꼴), 그리고 기존
-> 복원본 "Dokkaebi Dinaru"(Juwan Park)와 혼동을 피하기 위해 `DNR`(디나루의 자음) 마커를
-> 넣고 실제 장르(고딕)를 명시했다. 자세한 출처·계보는 [docs/PROVENANCE.md](docs/PROVENANCE.md).
+이름에 `DNR`(디나루의 자음) 마커를 붙인 이유와 원본의 정체·계보는
+[docs/PROVENANCE.md](docs/PROVENANCE.md)에 정리했다.
 
-## 성격
+## 개요
 
-- 원본: `도깨비 디나루` (파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
-- 커버리지(현재): 현대 한글 완성형 11,172자 + 라틴·가나·키릴·그리스·기호, 한자 없음
-- upem 1024 → 1픽셀 = 64 units. 라틴/기호는 비례폭, 한글은 전각
-- 라이선스: **SIL Open Font License 1.1** (예약 글꼴 이름 `Dokkaebi DNR`) — [OFL.txt](OFL.txt)
+- 원본: `도깨비 디나루`(파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
+- 목표 산출물: Regular/Light 두 웨이트 서체 + gensei-pc98용 한글 `font.bmp`
+- 커버리지: 한글 완성형 11,172자 + 라틴·가나·키릴·그리스·기호 (한자 없음)
+- 라이선스: SIL Open Font License 1.1, 예약 글꼴 이름 `Dokkaebi DNR` — [OFL.txt](OFL.txt)
+- 변환 방식: 픽셀을 64×64 유닛 정사각형으로 보고 인접 픽셀의 공유 변을 상쇄해 병합
+  폴리곤을 만든다. 곡선 트레이싱을 쓰지 않으므로 확대해도 계단이 그대로 보존된다.
 
-## 복원·파생 방식
+## 작업 계획
 
-"켜진 픽셀 = 64×64 정사각형". 인접 픽셀의 공유 변을 상쇄(edge-cancellation)해 병합 폴리곤을
-만들고, 카운터(구멍)는 반대 winding으로 자동 분리 → non-zero 채우기로 항상 정확. 곡선 트레이싱을
-쓰지 않으므로 아무리 키워도 계단이 100% 보존된다. 비례폭은 각 글자의 잉크 범위에서 자동 산출.
+전체 로드맵(웨이트별 진행 상황, 디자인 문법, 한글 재설계 트랙)은
+[docs/ROADMAP.md](docs/ROADMAP.md)를 참고한다.
 
-## 파이프라인
+## 구조
 
 ```
-original/HANKBC.ttf
-  └ tools/pixelfont.py    픽셀→병합 폴리곤 (픽셀-정확)
-  └ tools/customglyphs.py 손으로 그린 글리프 오버라이드 (tools/glyphs.json 로드)
-  └ tools/spacing.py      잉크 기준 비례폭 산출
-  └ tools/metadata.py     이름/OS2/gasp 등 메타데이터
-  └ scripts/build_ufo.py  → build/DokkaebiDNRGothic.ufo
-  └ fontmake              → .ttf / .otf
-  └ scripts/finalize.py   한국어 로컬라이즈 이름 추가
-  └ scripts/verify_ttf.py       픽셀-정확 회귀 검증
-  └ scripts/coverage_report.py  빠진 흔한 문자 리포트
+original/HANKBC.ttf       원본(읽기 전용)
+tools/                    변환 엔진, 손으로 그린 글리프 데이터, 픽셀 에디터
+scripts/                  빌드·검증·리포트 스크립트
+build/                    빌드 산출물(UFO/TTF/OTF)
+docs/                     계보·로드맵 문서
 ```
 
-## 픽셀 에디터 (글자 직접 편집)
-
-```bash
-.venv/bin/python scripts/editor_server.py       # http://localhost:8000
-```
-
-브라우저에서 픽셀을 클릭·드래그해 편집 → **서버에 저장**하면 `tools/glyphs.json`에
-바로 기록되고, **저장 후 빌드**로 TTF까지 재생성됩니다. 손으로 그린 글자는 원본
-비트맵을 덮어씁니다(현재 대문자 A–Z·숫자 0–9). 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)을
-열면 복사 방식으로도 쓸 수 있습니다.
+빌드 파이프라인: 원본 비트맵 → 커스텀 글리프 오버레이 → 폴리곤 변환·자폭 산출 →
+UFO → fontmake → 메타데이터/로컬라이즈 이름 부여 → 검증.
 
 ## 빌드
 
@@ -56,24 +44,17 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/fontmake -u build/DokkaebiDNRGothic.ufo -o ttf otf --output-dir build/
 .venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic.ttf build/DokkaebiDNRGothic.otf
 
-# 검증 / 리포트
 .venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic.ttf
 .venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic.ttf
 ```
 
-## 진행 상태
+## 픽셀 에디터
 
-- [x] Phase 0: 원본 분석·커버리지 조사
-- [x] Phase 1: 픽셀→폴리곤 변환 엔진 (전수 12,354자 픽셀-정확, 0 mismatch)
-- [x] Phase 2: 전체 빌드 + 빌드 폰트 픽셀-정확 검증
-- [x] 방향 전환: 충실 복원본이 이미 존재 → **파생·리디자인**으로
-- [x] Phase 3: 메타데이터·OFL·gasp 그리드핏 억제, 비례폭 적용, 이름 확정
-- [ ] 리디자인 ①: 글자 다듬기 (개별 글리프 수작업)
-- [ ] 리디자인 ②: 커버리지 확장 (예: ₩ · — · © 등, `coverage_report.py` 참고)
-- [ ] 리디자인 ③: 자폭/간격 미세 조정
-- [ ] 최종 검증(fontbakery) · 배포
+```bash
+.venv/bin/python scripts/editor_server.py       # http://localhost:8000
+```
 
-## 참고
-
-- 출처·라이선스 조사: [docs/PROVENANCE.md](docs/PROVENANCE.md)
-- 1차 사료: [docs/sources/article.txt](docs/sources/article.txt) (김윤수 「글꼴 모음 #002」, 1994)
+브라우저에서 픽셀을 클릭·드래그해 편집한다. Regular/Light 웨이트는 상단 탭으로
+분리되어 있고, 저장하면 각 웨이트의 글리프 파일에 바로 기록된다. Regular는
+저장 후 버튼 한 번으로 TTF까지 재빌드할 수 있다. 서버 없이
+[tools/pixel_editor.html](tools/pixel_editor.html)만 열어도 복사 방식으로 쓸 수 있다.
