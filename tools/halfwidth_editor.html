@@ -1,0 +1,416 @@
+<style>
+  :root {
+    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
+    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
+    --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
+      --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
+      --grid-line: #383d47; --ref: #6ea2ff; --ref-soft: #1e2a45; --ref2: #ff6b60;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
+    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
+    --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
+  }
+  :root[data-theme="dark"] {
+    --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
+    --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
+    --grid-line: #383d47; --ref: #6ea2ff; --ref-soft: #1e2a45; --ref2: #ff6b60;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--ground); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .card { background: var(--panel); border: 1px solid var(--faint);
+          border-radius: 12px; padding: 14px; }
+  .palette-card { flex: 1 1 260px; min-width: 240px; max-height: 640px;
+                  overflow-y: auto; }
+  .palette { display: grid; grid-template-columns: repeat(auto-fill, 44px);
+             gap: 6px; }
+  .swatch { width: 44px; height: 44px; border: 1px solid var(--grid-line);
+            border-radius: 6px; background: var(--cell-off); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; color: var(--muted); position: relative; padding: 0; }
+  .swatch:hover { border-color: var(--accent); }
+  .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .swatch.saved::after { content: "●"; position: absolute; top: 1px; right: 3px;
+                         font-size: 8px; color: var(--accent); }
+  .swatch.blank-ref { opacity: 0.45; }
+  .swatch canvas { width: 32px; height: 32px; image-rendering: pixelated; pointer-events: none; }
+  .draw-card { flex: 0 0 auto; }
+  .grid-outer { position: relative; width: 176px; height: 352px; }
+  .grid { position: absolute; inset: 0; display: grid;
+          grid-template-columns: repeat(8, 22px); grid-auto-rows: 22px; }
+  .cell { width: 22px; height: 22px; background: var(--cell-off); border: 0;
+          padding: 0; cursor: pointer; }
+  .grid.showgrid .cell { border-right: 1px solid var(--grid-line);
+                         border-bottom: 1px solid var(--grid-line); }
+  .cell.on { background: var(--ink); }
+  .ghost-ref { position: absolute; inset: 0; pointer-events: none;
+               image-rendering: pixelated; opacity: 0.55; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-width: 176px; }
+  .btn { font: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer;
+         border: 1px solid var(--grid-line); border-radius: 7px; background: var(--panel);
+         color: var(--ink); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .status { font-size: 12px; color: var(--muted); }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .toggle input { accent-color: var(--accent); }
+  .cur-label { font-size: 13px; font-weight: 600; margin-top: 14px; }
+  .cur-label .n { color: var(--accent); }
+  .legend { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+                 margin-right: 4px; }
+  .toasts { position: fixed; bottom: 16px; right: 16px; display: flex;
+            flex-direction: column; gap: 8px; z-index: 20; }
+  .toast { font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
+           color: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+           opacity: 0; transform: translateY(6px); transition: all 0.2s; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast[data-kind="error"] { background: #b3392c; color: #fff; }
+</style>
+
+<div class="wrap">
+  <h1>반각(半角) 한글 에디터</h1>
+  <p class="sub">폰트 빌드와는 별개의 도구입니다. font.bmp col 10-11(완성형 '가'에서 왼쪽 6-7칸)의
+    PC-98 반각 한글 표를 참조(파란 오버레이)해서 새로 손으로 그립니다 — 188칸 중 122칸에 원본
+    잉크가 있고, 66칸은 ROM에서도 빈 칸입니다. <code>tools/glyphs_halfwidth.json</code>에 저장.</p>
+
+  <div class="layout">
+    <div class="card palette-card">
+      <div class="palette" id="palette"></div>
+      <p class="legend">
+        <span class="dot" style="background:var(--accent)"></span>저장됨(●)
+        칸이 흐리면 = ROM 원본이 빈 칸
+      </p>
+    </div>
+
+    <div class="card draw-card">
+      <div class="cur-label">슬롯 <span class="n" id="curLabel">10-1</span></div>
+      <div class="row" style="margin-top: 4px;">
+        <label class="toggle" for="charInput">대응 글자</label>
+        <input id="charInput" maxlength="1" size="2"
+               style="font: inherit; font-size: 14px; width: 44px; text-align: center;
+                      border: 1px solid var(--grid-line); border-radius: 6px;
+                      background: var(--panel); color: var(--ink); padding: 4px;">
+      </div>
+      <div class="grid-outer">
+        <div class="grid showgrid" id="grid"></div>
+        <canvas class="ghost-ref" id="ghostRef" width="176" height="352"></canvas>
+        <canvas class="ghost-ref" id="ghostLight" width="176" height="352"></canvas>
+      </div>
+      <div class="row">
+        <label class="toggle"><input type="checkbox" id="refToggle" checked> 참조 오버레이(파랑)</label>
+        <label class="toggle"><input type="checkbox" id="lightToggle" checked> Light 절반(빨강)</label>
+      </div>
+      <div class="tools">
+        <button class="btn" data-act="clear">비우기</button>
+        <button class="btn" data-act="up">↑</button>
+        <button class="btn" data-act="down">↓</button>
+        <button class="btn" data-act="left">←</button>
+        <button class="btn" data-act="right">→</button>
+        <button class="btn" data-act="copygrid">복사</button>
+        <button class="btn" data-act="pastegrid">붙여넣기</button>
+        <button class="btn" data-act="revert">원래대로</button>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="saveOne">저장</button>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+  const W = 8, H = 16;
+  const gridEl = document.getElementById("grid");
+  const ghostRef = document.getElementById("ghostRef");
+  const toastsEl = document.getElementById("toasts");
+  const statusEl = document.getElementById("status");
+  const curLabel = document.getElementById("curLabel");
+  const ghostLight = document.getElementById("ghostLight");
+  const charInput = document.getElementById("charInput");
+
+  let SAVED = {};   // slot -> rows[]  (tools/glyphs_halfwidth.json)
+  let REF = {};     // slot -> rows[]  (PC-98 reference, /api/halfwidth_ref)
+  let CHARMAP = {}; // slot -> char    (tools/halfwidth_char_map.json)
+  let lightCache = {}; // char -> rows[] (8-wide, /api/halfwidth_light_ref)
+  let curSlot = "10-1";
+
+  function slotKey(s) {
+    const [col, ten] = s.split("-").map(Number);
+    return col * 1000 + ten;
+  }
+  let cells = blank();
+  let refOn = true;
+  let lightOn = true;
+  let gridClipboard = null;
+
+  function blank() { return Array.from({ length: H }, () => Array(W).fill(false)); }
+  function rowsToCells(rows) {
+    return rows.map(r => Array.from({ length: W }, (_, x) => r[x] === "#"));
+  }
+  function cellsToRows() {
+    return cells.map(row => row.map(v => (v ? "#" : ".")).join(""));
+  }
+
+  function buildGrid() {
+    gridEl.innerHTML = "";
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const b = document.createElement("button");
+        b.className = "cell";
+        b.dataset.x = x; b.dataset.y = y;
+        gridEl.appendChild(b);
+      }
+    }
+    paintAll();
+    drawRefGhost();
+    drawLightGhost();
+  }
+  function paintAll() {
+    const nodes = gridEl.children;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        nodes[y * W + x].classList.toggle("on", !!cells[y][x]);
+  }
+
+  function paint(x, y, on) {
+    cells[y][x] = on;
+    gridEl.children[y * W + x].classList.toggle("on", on);
+  }
+
+  let painting = false, paintVal = true;
+  gridEl.addEventListener("pointerdown", e => {
+    const t = e.target.closest(".cell"); if (!t) return;
+    painting = true;
+    const x = +t.dataset.x, y = +t.dataset.y;
+    paintVal = !cells[y][x];
+    paint(x, y, paintVal);
+    e.preventDefault();
+  });
+  gridEl.addEventListener("pointerenter", e => {
+    if (!painting) return;
+    const t = e.target.closest(".cell"); if (!t) return;
+    paint(+t.dataset.x, +t.dataset.y, paintVal);
+  }, true);
+  gridEl.addEventListener("pointerover", e => {
+    if (!painting) return;
+    const t = e.target.closest(".cell"); if (!t) return;
+    paint(+t.dataset.x, +t.dataset.y, paintVal);
+  });
+  window.addEventListener("pointerup", () => { painting = false; });
+
+  function drawRefGhost() {
+    const ctx = ghostRef.getContext("2d");
+    ctx.clearRect(0, 0, ghostRef.width, ghostRef.height);
+    if (!refOn) return;
+    const rows = REF[curSlot];
+    if (!rows) return;
+    const ink = getComputedStyle(document.documentElement).getPropertyValue("--ref");
+    ctx.fillStyle = ink;
+    const cw = ghostRef.width / W, ch = ghostRef.height / H;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (rows[y] && rows[y][x] === "#")
+          ctx.fillRect(x * cw, y * ch, cw, ch);
+  }
+  document.getElementById("refToggle").addEventListener("change", e => {
+    refOn = e.target.checked;
+    drawRefGhost();
+  });
+
+  function drawLightGhost() {
+    const ctx = ghostLight.getContext("2d");
+    ctx.clearRect(0, 0, ghostLight.width, ghostLight.height);
+    if (!lightOn) return;
+    const ch = CHARMAP[curSlot];
+    if (!ch) return;
+    const rows = lightCache[ch];
+    if (!rows) return;
+    const ink = getComputedStyle(document.documentElement).getPropertyValue("--ref2");
+    ctx.fillStyle = ink;
+    const cw = ghostLight.width / W, ch2 = ghostLight.height / H;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (rows[y] && rows[y][x] === "#")
+          ctx.fillRect(x * cw, y * ch2, cw, ch2);
+  }
+  document.getElementById("lightToggle").addEventListener("change", e => {
+    lightOn = e.target.checked;
+    drawLightGhost();
+  });
+
+  async function fetchLightRef(ch) {
+    if (!ch || lightCache[ch] !== undefined) return;
+    const res = await fetch("api/halfwidth_light_ref?s=" + encodeURIComponent(ch));
+    const json = await res.json();
+    lightCache[ch] = (json.chars[0] && json.chars[0].rows) || null;
+  }
+
+  charInput.addEventListener("change", async () => {
+    const ch = Array.from(charInput.value)[0] || "";
+    charInput.value = ch;
+    const body = {}; body[curSlot] = ch;
+    CHARMAP[curSlot] = ch || undefined;
+    try {
+      await fetch("api/halfwidth_charmap", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) { /* offline: keeps the in-memory assignment for this session */ }
+    if (ch) await fetchLightRef(ch);
+    drawLightGhost();
+  });
+
+  function shift(dx, dy) {
+    const out = blank();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const ny = y + dy, nx = x + dx;
+      if (ny >= 0 && ny < H && nx >= 0 && nx < W) out[ny][nx] = cells[y][x];
+    }
+    return out;
+  }
+
+  document.querySelector(".tools").addEventListener("click", e => {
+    const act = e.target.dataset.act; if (!act) return;
+    if (act === "clear") cells = blank();
+    else if (act === "up") cells = shift(0, -1);
+    else if (act === "down") cells = shift(0, 1);
+    else if (act === "left") cells = shift(-1, 0);
+    else if (act === "right") cells = shift(1, 0);
+    else if (act === "copygrid") {
+      gridClipboard = cells.map(r => [...r]);
+      showToast(`복사됨 · 슬롯 ${curSlot}`, "success");
+      return;
+    } else if (act === "pastegrid") {
+      if (!gridClipboard) { showToast("복사된 칸이 없습니다", "error"); return; }
+      cells = gridClipboard.map(r => [...r]);
+    } else if (act === "revert") {
+      const rows = SAVED[curSlot];
+      cells = rows ? rowsToCells(rows) : blank();
+      showToast(`저장된 상태로 되돌림 · 슬롯 ${curSlot}`, "success");
+    }
+    paintAll();
+  });
+
+  function showToast(message, kind) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.dataset.kind = kind || "info";
+    el.textContent = message;
+    toastsEl.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    const life = kind === "error" ? 4200 : 2200;
+    setTimeout(() => {
+      el.classList.remove("show");
+      el.addEventListener("transitionend", () => el.remove(), { once: true });
+      setTimeout(() => el.remove(), 300);
+    }, life);
+  }
+
+  function slotHasInk(rows) {
+    return !!rows && rows.some(r => r.includes("#"));
+  }
+
+  function buildPalette() {
+    const el = document.getElementById("palette");
+    el.innerHTML = "";
+    const slots = Object.keys(REF).sort((a, b) => slotKey(a) - slotKey(b));
+    for (const slot of slots) {
+      const b = document.createElement("button");
+      b.className = "swatch";
+      b.dataset.slot = slot;
+      if (SAVED[slot]) b.classList.add("saved");
+      if (!slotHasInk(REF[slot])) b.classList.add("blank-ref");
+      const cv = document.createElement("canvas");
+      cv.width = W; cv.height = H;
+      const rows = SAVED[slot] || REF[slot];
+      const ctx = cv.getContext("2d");
+      if (rows) {
+        for (let y = 0; y < H; y++)
+          for (let x = 0; x < W; x++)
+            if (rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
+      }
+      b.appendChild(cv);
+      const lbl = document.createElement("span");
+      lbl.style.position = "absolute"; lbl.style.bottom = "1px"; lbl.style.left = "2px";
+      lbl.style.fontSize = "7px";
+      lbl.textContent = CHARMAP[slot] ? `${slot} ${CHARMAP[slot]}` : slot;
+      b.appendChild(lbl);
+      b.addEventListener("click", () => loadSlot(slot));
+      el.appendChild(b);
+    }
+    markPalette();
+  }
+  function markPalette() {
+    document.querySelectorAll(".swatch").forEach(s =>
+      s.classList.toggle("active", s.dataset.slot === curSlot));
+  }
+
+  async function loadSlot(slot) {
+    curSlot = slot;
+    curLabel.textContent = slot;
+    const rows = SAVED[slot];
+    cells = rows ? rowsToCells(rows) : blank();
+    charInput.value = CHARMAP[slot] || "";
+    if (CHARMAP[slot]) await fetchLightRef(CHARMAP[slot]);
+    buildGrid();
+    markPalette();
+  }
+
+  async function saveCurrent() {
+    const body = {}; body[curSlot] = cellsToRows();
+    const res = await fetch("api/halfwidth_glyphs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`저장 실패 (${res.status}) ${msg}`.trim());
+    }
+    SAVED[curSlot] = cellsToRows();
+    buildPalette();
+  }
+  document.getElementById("saveOne").addEventListener("click", async e => {
+    const btn = e.currentTarget; const t = btn.textContent;
+    btn.disabled = true;
+    try {
+      await saveCurrent();
+      showToast(`저장됨 · 슬롯 ${curSlot}`, "success");
+      btn.textContent = "저장됨 ✓";
+    } catch (err) {
+      showToast(String(err.message || err), "error");
+      btn.textContent = "저장 실패";
+    } finally {
+      setTimeout(() => { btn.textContent = t; btn.disabled = false; }, 1200);
+    }
+  });
+
+  async function connect() {
+    const refRes = await fetch("api/halfwidth_ref");
+    const refJson = await refRes.json();
+    for (const { slot, rows } of refJson.slots) REF[slot] = rows;
+
+    SAVED = await (await fetch("api/halfwidth_glyphs")).json();
+    CHARMAP = await (await fetch("api/halfwidth_charmap")).json();
+    await Promise.all(Object.values(CHARMAP).map(fetchLightRef));
+
+    buildPalette();
+    await loadSlot("10-1");
+    statusEl.textContent = `${Object.keys(REF).length}칸 · 저장됨 ${Object.keys(SAVED).length}칸 · `
+      + `글자 지정 ${Object.keys(CHARMAP).length}칸`;
+  }
+  connect();
+</script>

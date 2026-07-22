@@ -40,6 +40,38 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              font; light = thinned Latin/numbers + composed
                              KS X 1001 Hangul (scripts/compose_light.py).
 
+Also serves tools/halfwidth_editor.html at /halfwidth -- a separate tool for
+hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
+(nothing here feeds build_ufo.py):
+
+  GET  /api/halfwidth_ref  -> reference grids for all 188 slots (2 cols x 94)
+                              of the PC-98 BIOS's 반각 한글 table (font.bmp
+                              cols 10-11, see scripts/pc98_halfwidth_map.py)
+                              -- 122 have ink, 66 are blank in the ROM. Slots
+                              are keyed "{col}-{ten}" (e.g. "10-5"), not
+                              character: this table isn't in KS X 1001 or
+                              Unicode order.
+  GET  /api/halfwidth_glyphs
+                          -> tools/glyphs_halfwidth.json, the user's own
+                             hand-drawn slots { "10-5": [rows], ... }
+  POST /api/halfwidth_glyphs
+                          -> merge { "10-5": [rows], ... } into that file
+  GET  /api/halfwidth_charmap
+                          -> tools/halfwidth_char_map.json, the user's own
+                             slot->character notes { "10-5": "가", ... } (typed
+                             in by hand -- this table has no recorded Unicode
+                             identity otherwise, see pc98_halfwidth_map.py)
+  POST /api/halfwidth_charmap
+                          -> merge { "10-5": "가", ... } into that file; a
+                             blank value clears the slot's assignment
+  GET  /api/halfwidth_light_ref?s=..
+                          -> per-char grids: that character's Light 완성형
+                             glyph (build/light_hangul.json) squeezed
+                             left-right by half (OR-fold column pairs,
+                             16px->8px) -- a rough shape guide, second overlay
+                             (red) for whichever character the editor's
+                             halfwidth_char_map.json says the current slot is
+
 Stdlib only. Run from the repo root.
 """
 import argparse
@@ -54,6 +86,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
+HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_regular.json"),
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),
@@ -65,6 +98,12 @@ PAGE_HEAD = (
     "<title>도깨비DNR 픽셀 에디터</title></head><body>"
 )
 PAGE_TAIL = "</body></html>"
+
+HALFWIDTH_PAGE_HEAD = (
+    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>반각 한글 에디터</title></head><body>"
+)
 
 
 def _weight_file(weight):
@@ -185,6 +224,11 @@ def text_grids(weight, s):
                 grid = tv.thin_vertical(regular[ch])
             except Exception:
                 grid = None
+        if grid is None and _is_kana(ch):
+            # PC-98's 둥근모꼴 replaces the original bitmap's kana entirely
+            # (both weights) -- font.bmp's kana was never touched by the
+            # Korean localization, unlike its Hangul/kanji regions.
+            grid = _pc98_kana_grid(ch)
         if grid is None:
             grid = _original_grid(ch, strike, cmap)
         out.append({"ch": ch, "rows": grid})
@@ -236,10 +280,162 @@ def _pc98_grid(ch):
 
 
 def pc98_grids(s):
-    """Per-char pixel grids from the PC-98 BIOS font, for the 2,350 KS X 1001
-    완성형 Hangul it carries. Weight-independent -- used as a second
-    skeleton-reference overlay (둥근모꼴) alongside the original bitmap."""
-    return [{"ch": ch, "rows": _pc98_grid(ch)} for ch in s]
+    """Per-char pixel grids from the PC-98 BIOS font -- the 2,350 KS X 1001
+    완성형 Hangul or the 169 hiragana/katakana it carries. Weight-independent --
+    used as a second skeleton-reference overlay (둥근모꼴) alongside the
+    original bitmap."""
+    return [{"ch": ch, "rows": _pc98_any_grid(ch)} for ch in s]
+
+
+_PC98_KANA = None  # lazy (PIL pixel access, {kana: [col, row]})
+PC98_KANA_MAP = os.path.join(ROOT, "tools", "pc98_kana_map.json")
+
+
+def _pc98_kana():
+    """PC-98 BIOS 둥근모꼴 hiragana/katakana: tools/pc98_kana_map.json (see
+    scripts/pc98_kana_map.py) plus the same font.bmp Hangul indexes into.
+    No halfwidth katakana -- not present anywhere in this ROM."""
+    global _PC98_KANA
+    if _PC98_KANA is None:
+        px, _ = _pc98()  # reuse the same bitmap; raises if unavailable
+        with open(PC98_KANA_MAP, encoding="utf-8") as f:
+            cells = json.load(f)["cells"]
+        _PC98_KANA = (px, cells)
+    return _PC98_KANA
+
+
+def _pc98_kana_grid(ch):
+    try:
+        px, cells = _pc98_kana()
+    except Exception:
+        return None
+    cell = cells.get(ch)
+    if not cell:
+        return None
+    col, row = cell
+    x0, y0 = col * 16, row * 16
+    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
+            for y in range(16)]
+
+
+def _pc98_any_grid(ch):
+    """Hangul or kana, whichever this character is. Weight-independent base
+    reference: kana now comes from here instead of the original bitmap (see
+    docs/ROADMAP.md) -- font.bmp never had the original's kana replaced."""
+    return _pc98_grid(ch) or _pc98_kana_grid(ch)
+
+
+_PC98_HALFWIDTH = None  # lazy (PIL pixel access, {"1".."94": [col, row]})
+PC98_HALFWIDTH_MAP = os.path.join(ROOT, "tools", "pc98_halfwidth_map.json")
+HALFWIDTH_FILE = os.path.join(ROOT, "tools", "glyphs_halfwidth.json")
+
+
+def _pc98_halfwidth():
+    """PC-98 BIOS 반각 한글 table: tools/pc98_halfwidth_map.json (see
+    scripts/pc98_halfwidth_map.py), col 10 of the same font.bmp. Slots are
+    keyed by ten-index ("1".."94"), not character -- this table isn't in
+    KS X 1001 or Unicode-halfwidth-Hangul order, it's a ROM-specific set."""
+    global _PC98_HALFWIDTH
+    if _PC98_HALFWIDTH is None:
+        px, _ = _pc98()  # reuse the same bitmap; raises if unavailable
+        with open(PC98_HALFWIDTH_MAP, encoding="utf-8") as f:
+            cells = json.load(f)["cells"]
+        _PC98_HALFWIDTH = (px, cells)
+    return _PC98_HALFWIDTH
+
+
+def _pc98_halfwidth_grid(slot):
+    try:
+        px, cells = _pc98_halfwidth()
+    except Exception:
+        return None
+    cell = cells.get(slot)
+    if not cell:
+        return None
+    col, row = cell
+    x0, y0 = col * 16, row * 16
+    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
+            for y in range(16)]
+
+
+def _halfwidth_sort_key(slot):
+    """slot is "{col}-{ten}", e.g. "10-5" -- sort by (col, ten) numerically,
+    not lexicographically (else "10-10" < "10-2")."""
+    col, ten = slot.split("-")
+    return (int(col), int(ten))
+
+
+def halfwidth_ref_slots():
+    """All 반각 한글 reference slots (cols 10-11, 94 each), in (col, ten)
+    order. Blank-in-ROM slots still get an entry (all-blank rows) -- the
+    editor shows them the same as drawn ones, just with nothing to trace yet."""
+    try:
+        _, cells = _pc98_halfwidth()
+    except Exception:
+        return []
+    return [{"slot": s, "rows": _pc98_halfwidth_grid(s)}
+            for s in sorted(cells, key=_halfwidth_sort_key)]
+
+
+def read_halfwidth():
+    with open(HALFWIDTH_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_halfwidth(data):
+    ordered = {k: data[k] for k in sorted(data, key=_halfwidth_sort_key)}
+    with open(HALFWIDTH_FILE, "w", encoding="utf-8") as f:
+        json.dump(ordered, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+
+
+HALFWIDTH_CHARMAP_FILE = os.path.join(ROOT, "tools", "halfwidth_char_map.json")
+
+
+def read_halfwidth_charmap():
+    with open(HALFWIDTH_CHARMAP_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_halfwidth_charmap(data):
+    # empty string clears an assignment rather than storing a blank
+    cleaned = {k: v for k, v in data.items() if v}
+    ordered = {k: cleaned[k] for k in sorted(cleaned, key=_halfwidth_sort_key)}
+    with open(HALFWIDTH_CHARMAP_FILE, "w", encoding="utf-8") as f:
+        json.dump(ordered, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+
+
+_LIGHT_HANGUL = None  # lazy build/light_hangul.json (see scripts/compose_light.py)
+LIGHT_HANGUL_FILE = os.path.join(ROOT, "build", "light_hangul.json")
+
+
+def _light_hangul():
+    global _LIGHT_HANGUL
+    if _LIGHT_HANGUL is None:
+        with open(LIGHT_HANGUL_FILE, encoding="utf-8") as f:
+            _LIGHT_HANGUL = json.load(f)
+    return _LIGHT_HANGUL
+
+
+def _halved_light_grid(ch):
+    """This character's Light 완성형 glyph (16px wide), squeezed left-right by
+    half (OR-fold each adjacent column pair -> 8px) -- a rough shape guide
+    for hand-drawing its 반각 counterpart. Not a claim that this IS the
+    correct halfwidth shape (halfwidth glyphs are independently designed, not
+    a mechanical rescale) -- just a starting reference, per user request."""
+    try:
+        rows = _light_hangul().get(ch)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    return ["".join("#" if (r[2 * c] == "#" or r[2 * c + 1] == "#") else "."
+                     for c in range(8)) for r in rows]
+
+
+def halfwidth_light_grids(s):
+    return [{"ch": ch, "rows": _halved_light_grid(ch)} for ch in s]
 
 
 def ks2350_chars():
@@ -384,6 +580,21 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/kana":
             return self._send(200, json.dumps({"chars": kana_chars()},
                                               ensure_ascii=False))
+        if parsed.path in ("/halfwidth", "/halfwidth.html", "/halfwidth/"):
+            with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
+                page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
+            return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path == "/api/halfwidth_ref":
+            return self._send(200, json.dumps({"slots": halfwidth_ref_slots()},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/halfwidth_glyphs":
+            return self._send(200, json.dumps(read_halfwidth(), ensure_ascii=False))
+        if parsed.path == "/api/halfwidth_charmap":
+            return self._send(200, json.dumps(read_halfwidth_charmap(), ensure_ascii=False))
+        if parsed.path == "/api/halfwidth_light_ref":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": halfwidth_light_grids(s)},
+                                              ensure_ascii=False))
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
@@ -406,6 +617,24 @@ class Handler(BaseHTTPRequestHandler):
             weight = self._weight_qs(qs)
             ok, log = run_build(weight)
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "log": log}))
+        if parsed.path == "/api/halfwidth_glyphs":
+            try:
+                incoming = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return self._send(400, json.dumps({"error": f"bad json: {e}"}))
+            data = read_halfwidth()
+            data.update(incoming)
+            write_halfwidth(data)
+            return self._send(200, json.dumps({"saved": list(incoming), "total": len(data)}))
+        if parsed.path == "/api/halfwidth_charmap":
+            try:
+                incoming = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return self._send(400, json.dumps({"error": f"bad json: {e}"}))
+            data = read_halfwidth_charmap()
+            data.update(incoming)
+            write_halfwidth_charmap(data)
+            return self._send(200, json.dumps({"saved": list(incoming), "total": len(data)}))
         self._send(404, json.dumps({"error": "not found"}))
 
 
@@ -452,6 +681,7 @@ def main():
     url = f"http://localhost:{args.port}/"
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
     print(f"  editing tools/glyphs_regular.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
+    print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
     if not args.no_open:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

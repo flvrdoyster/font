@@ -30,7 +30,7 @@
 
 - [x] **Regular 한글**: 원본 도깨비 디나루 벡터화로 완성(11,172자 전부). `--all` 빌드.
 - [x] **Regular 라틴/숫자**: 반각/전각 손그림 124자(`glyphs_regular.json`) 완성.
-- [x] **Light 한글 2,350자**: 손확정(`glyphs_light.json`에 993자 + 나머지 조합, 2,350/2,350
+- [x] **Light 한글 2,350자**: 손확정(`glyphs_light.json`에 1,002자 + 나머지 조합, 2,350/2,350
       커버).
 - [x] **Light 라틴/숫자 반각·전각 124자**: 손확정 완료(`glyphs_light.json`, 124/124).
       `build_ufo.py`의 `build_light`이 확정본을 그대로 쓰고, 안 그린 것만 얇혀서 채우는
@@ -41,18 +41,43 @@
 
 완성된 Light 폰트를 gensei-pc98이 쓸 수 있게 만든다.
 
-- **font.bmp 추출**: Light 한글을 gensei-pc98이 바로 읽는 `font.bmp` 포맷으로 배치·
-  출력(현재는 TTF까지만).
-- **가나(히라가나·가타카나·반각가타카나, 251자)**: 순서를 당겨 먼저 진행 중. Light부터
-  손으로 그린다.
+- **font.bmp 추출**: `scripts/build_pc98_bmp.py` (신규) — 원본 `gensei-pc98/docs/bios/
+  font.bmp`를 복사해서 완성형 한글 칸(`tools/pc98_hangul_map.json`, col16-40)은
+  `build/light_hangul.json`으로, 반각 한글 칸(아래 참고)은 `tools/glyphs_halfwidth.json`
+  으로 교체 — 그 외(가나·한자·기호 등)는 원본 그대로 보존. 지금은 테스트/미리보기
+  출력(`build/font_light.bmp`)만 만들고 `../gensei-pc98` 자체는 건드리지 않는다.
+- **가나(히라가나·가타카나, PC-98 기준 169자)**: Light부터 손으로 그리는 중.
+  - **PC-98 font.bmp에 가나 원본이 실제로 있음을 확인**(초반엔 없다고 잘못 판단했다가
+    정정) — col4=히라가나(ku4), col5=가타카나(ku5), `row=32+ten`(표준 JIS X 0208
+    ku4/ku5 순서, ten=1부터). `scripts/pc98_kana_map.py` → `tools/pc98_kana_map.json`
+    (169자, 반각가타카나는 이 ROM에 없음). **미확정 가나는 원본 HANKBC 비트맵 대신
+    이 PC-98 데이터로 폴백**하도록 `editor_server.py`의 `/api/text`·`/api/pc98`을
+    수정(두 웨이트 공통) — 확정본(`glyphs_light.json`)이 있으면 항상 그게 우선.
   - 참조 오버레이(보라색, 가나 전용): Meiryo. 사용자의 Microsoft Office 설치본
     (`/Applications/Microsoft Word.app/.../DFonts/meiryo.ttc`)에서 **그 자리에서
     읽기만** 하고 저장소엔 복사·커밋하지 않는다 — 라이선스 재배포 문제 없이 로컬
     참조 전용으로만 쓴다. **모양만 참고**하고 실제 픽셀 데이터는 이식하지 않으며
     PC-98 때와 같은 방식(참조 보며 손으로 각진 스타일로 새로 그림)이라 저작권 고지
-    의무도 없다(도안 자체의 저작권 비보호는 `docs/PROVENANCE.md` 참고).
+    의무도 없다(도안 자체의 저작권 비보호는 `docs/PROVENANCE.md` 참고). 정렬을
+    폰트 메트릭 기반으로 다시 스케일해본 적이 있으나 되돌림 — 지금은 16px 고정
+    크기 + baseline row 13 그대로.
   - 에디터: `/api/kana`(글자 목록), `/api/meiryo`(참조 렌더, Light 탭·가나 전용)
-- **반각 한글 98자**: 미착수.
+- **반각 한글**: 폰트 빌드와 별개인 전용 도구로 착수 — `tools/halfwidth_editor.html`
+  (`editor_server.py`가 `/halfwidth`로 서빙). `build_ufo.py`는 이 데이터를 전혀
+  안 읽는다.
+  - `font.bmp`의 col10-11(완성형 '가'에서 왼쪽 6-7칸)에 PC-98 자체 반각 한글 표가
+    있음을 발견 — KS X 1001도 유니코드 반각 자모 블록도 아닌 ROM 고유 배열이라
+    슬롯을 `"{col}-{ten}"`으로 식별(`scripts/pc98_halfwidth_map.py` →
+    `tools/pc98_halfwidth_map.json`). 188칸(94×2) 중 122칸에 원본 잉크, 66칸은
+    ROM에서도 빈 칸.
+  - 8×16 캔버스에 파란 PC-98 참조 오버레이를 보며 손으로 그려 `tools/
+    glyphs_halfwidth.json`에 저장 — **122/122 슬롯 완료**.
+  - 슬롯이 어떤 유니코드 글자에 대응하는지는 자동 매칭이 신뢰도 있게 안 돼서
+    (반각 디자인은 전각을 단순 축소한 게 아니라 별도로 그려짐) 사용자가 직접
+    타이핑해서 지정(`tools/halfwidth_char_map.json`) — 지정하면 그 글자의 Light
+    완성형 글리프를 좌우로 절반 접어(OR-fold) 빨간 보조 오버레이로 보여준다.
+  - `build_pc98_bmp.py`가 완성형과 함께 이 122칸도 `font_light.bmp`에 반영(8px
+    글리프를 16px 칸 왼쪽에, 나머지 8칸은 비움).
 - (원본 약물/기호 결손분 신규 드로잉도 필요 시 여기서 함 — `coverage_report.py` 목록.)
 
 ## 최종 — 전체 11,172자 확장 (도구 개선 필요)
