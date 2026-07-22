@@ -27,6 +27,13 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              independent; a second skeleton-reference overlay.
   GET  /api/ks2350        -> the 2,350 KS X 1001 완성형 syllables (char list),
                              for the editor's full-coverage Light palette.
+  GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
+                             list), for the editor's kana palette (Phase 3).
+  GET  /api/dotgothic16?s=..
+                          -> per-char grids rasterized from DotGothic16 (SIL
+                             OFL 1.1, refs/dotgothic16/) at its native 16px
+                             size. Reference-only overlay for hand-drawing
+                             kana/symbols -- never embedded in built output.
   POST /api/build?weight=regular|light
                           -> rebuild that weight's TTF (build_ufo -> fontmake
                              -> finalize). regular = full original-bitmap
@@ -244,6 +251,76 @@ def ks2350_chars():
         return []
 
 
+_DOTGOTHIC16 = None  # lazy freetype Face
+DOTGOTHIC16_TTF = os.path.join(ROOT, "refs", "dotgothic16", "DotGothic16-Regular.ttf")
+DOTGOTHIC16_BASELINE_ROW = 13   # matches the editor's baseline guide row
+
+
+def _dotgothic16():
+    """DotGothic16 (SIL OFL 1.1, The DotGothic16 Project Authors / Fontworks
+    Inc.) -- a visual-only reference overlay for hand-drawing kana/symbols in
+    our own style. Never embedded in built output; see refs/dotgothic16/OFL.txt."""
+    global _DOTGOTHIC16
+    if _DOTGOTHIC16 is None:
+        import freetype
+        face = freetype.Face(DOTGOTHIC16_TTF)
+        face.set_pixel_sizes(16, 16)
+        _DOTGOTHIC16 = face
+    return _DOTGOTHIC16
+
+
+def _dotgothic16_grid(ch):
+    try:
+        face = _dotgothic16()
+    except Exception:
+        return None
+    import freetype
+    try:
+        face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_TARGET_MONO)
+    except Exception:
+        return None
+    slot = face.glyph
+    if slot.bitmap.width == 0 or slot.bitmap.rows == 0:
+        return None  # e.g. .notdef / unsupported char
+    bmp = slot.bitmap
+    grid = [["."] * 16 for _ in range(16)]
+    for y in range(bmp.rows):
+        gy = DOTGOTHIC16_BASELINE_ROW - slot.bitmap_top + y
+        if not (0 <= gy < 16):
+            continue
+        for x in range(bmp.width):
+            gx = slot.bitmap_left + x
+            if not (0 <= gx < 16):
+                continue
+            byte = bmp.buffer[y * bmp.pitch + x // 8]
+            if (byte >> (7 - (x % 8))) & 1:
+                grid[gy][gx] = "#"
+    return ["".join(row) for row in grid]
+
+
+def dotgothic16_grids(s):
+    """Per-char pixel grids rasterized from DotGothic16 at its native 16px
+    size, roughly aligned to our baseline row. Reference overlay only."""
+    return [{"ch": ch, "rows": _dotgothic16_grid(ch)} for ch in s]
+
+
+def kana_chars():
+    """Hiragana + katakana + halfwidth katakana (Unicode-assigned codepoints
+    only), for the editor's kana palette (Phase 3)."""
+    import unicodedata
+
+    def assigned(lo, hi):
+        out = []
+        for cp in range(lo, hi + 1):
+            try:
+                unicodedata.name(chr(cp))
+            except ValueError:
+                continue
+            out.append(chr(cp))
+        return out
+    return assigned(0x3041, 0x309F) + assigned(0x30A1, 0x30FF) + assigned(0xFF61, 0xFF9F)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         payload = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -289,6 +366,13 @@ class Handler(BaseHTTPRequestHandler):
                                               ensure_ascii=False))
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/dotgothic16":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": dotgothic16_grids(s)},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/kana":
+            return self._send(200, json.dumps({"chars": kana_chars()},
                                               ensure_ascii=False))
         self._send(404, json.dumps({"error": "not found"}))
 

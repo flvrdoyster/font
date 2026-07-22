@@ -3,7 +3,7 @@
   :root {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
+    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
     --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
@@ -11,18 +11,18 @@
     :root {
       --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
       --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-      --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
+      --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
     }
   }
   :root[data-theme="light"] {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
+    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
   }
   :root[data-theme="dark"] {
     --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
     --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-    --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
+    --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
   }
 
   * { box-sizing: border-box; }
@@ -95,6 +95,7 @@
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
   .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
+  .ghost-dotgothic { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -211,7 +212,7 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
-    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격 (Light 한글만)</p>
+    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: DotGothic16(Light 가나/기호만, OFL 참조용)</p>
 
     <div class="draw-split">
       <div class="draw-canvas">
@@ -220,6 +221,7 @@
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
             <canvas class="ghost-pc98" id="ghostPc98"></canvas>
+            <canvas class="ghost-dotgothic" id="ghostDotGothic"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
@@ -285,6 +287,10 @@
       <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
       <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
     </div>
+    <div class="palette-group">
+      <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = DotGothic16(OFL) — 모양만 참고, 직접 새로 그립니다</span></p>
+      <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
+    </div>
   </section>
 
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -323,6 +329,16 @@
       const j = await res.json();
       KS2350_CHARS = j.chars || [];
     } catch (e) { KS2350_CHARS = []; }
+  }
+  // 히라가나+가타카나+반각가타카나 251자 -- 서버의 /api/kana에서 채워짐 (Phase 3).
+  let KANA_CHARS = [];
+  async function fetchKana() {
+    if (KANA_CHARS.length) return;
+    try {
+      const res = await fetch("api/kana", { cache: "no-store" });
+      const j = await res.json();
+      KANA_CHARS = j.chars || [];
+    } catch (e) { KANA_CHARS = []; }
   }
   let guidesOn = true;
   let ghostOn = true;
@@ -485,6 +501,21 @@
     }
     if (ch === curChar) drawGhost();
   }
+  // DotGothic16 (SIL OFL 1.1) -- Light-tab-only third overlay, visual
+  // reference only for hand-drawing kana/symbols in our own angular style;
+  // never saved/embedded. Drawn in --guide2 to stay distinct from the grey
+  // Regular ghost and the blue PC-98 overlay.
+  let dotgothicCache = {};
+  async function fetchDotGothic(ch) {
+    try {
+      const res = await fetch("api/dotgothic16?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      dotgothicCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      dotgothicCache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();
+  }
   function drawGhost() {
     const cv = document.getElementById("ghost");
     const px = 22;
@@ -522,6 +553,7 @@
       }
     }
     drawPc98Ghost();
+    drawDotGothicGhost();
   }
   function drawPc98Ghost() {
     const cv = document.getElementById("ghostPc98");
@@ -541,6 +573,29 @@
     const gw = rows[0].length;
     const dx = Math.floor((W - gw) / 2);
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--guide");
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < gw; x++)
+        if (rows[y][x] === "#")
+          ctx.fillRect((dx + x) * px, y * px, px, px);
+  }
+  function drawDotGothicGhost() {
+    const cv = document.getElementById("ghostDotGothic");
+    const px = 22;
+    cv.width = W * px; cv.height = H * px;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!ghostOn || WEIGHT !== "light") return;
+    let rows;
+    if (curChar in dotgothicCache) {
+      rows = dotgothicCache[curChar];
+    } else {
+      fetchDotGothic(curChar);
+      return;
+    }
+    if (!rows) return;
+    const gw = rows[0].length;
+    const dx = Math.floor((W - gw) / 2);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--guide2");
     for (let y = 0; y < H; y++)
       for (let x = 0; x < gw; x++)
         if (rows[y][x] === "#")
@@ -666,12 +721,13 @@
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
     buildPaletteGroup("paletteAll2350", KS2350_CHARS);
+    buildPaletteGroup("paletteKana", KANA_CHARS);
   }
   async function loadPaletteData() {
     // Palette is the same character set for both weights; the swatch content
     // just follows the active weight (server fills unsaved glyphs per weight).
     paletteData = {};
-    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("");
+    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + KANA_CHARS.join("");
     try {
       const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(chars),
                               { cache: "no-store" });
@@ -807,6 +863,7 @@
       DATA = await fetchWeightData(WEIGHT);
       setStatus(true, "서버 연결됨 · 저장 가능");
       await fetchKs2350();
+      await fetchKana();
       await loadPaletteData();
       buildPalette();
       pvCachedText = null;               // refetch preview with server glyphs

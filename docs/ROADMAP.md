@@ -43,8 +43,18 @@
 
 - **font.bmp 추출**: Light 한글을 gensei-pc98이 바로 읽는 `font.bmp` 포맷으로 배치·
   출력(현재는 TTF까지만).
-- **추가 글자**: gensei-pc98은 완성형 외에 **가나 + 반각 한글 98자**도 일부 필요.
-  이를 위해 에디터를 확장(가나·반각 그리드/팔레트)하고 해당 글자를 그린다.
+- **가나(히라가나·가타카나·반각가타카나, 251자)**: 순서를 당겨 먼저 진행 중. Light부터
+  손으로 그린다.
+  - 참조 오버레이(보라색): [DotGothic16](https://github.com/fontworks-fonts/DotGothic16)
+    (SIL OFL 1.1, Fontworks Inc., Reserved Font Name 없음)을 **모양만 참고**하는 용도로만
+    쓴다 — 실제 픽셀 데이터를 이식하지 않고 PC-98 때와 같은 방식(참조 보며 손으로 각진
+    스타일로 새로 그림)이라 저작권 고지 의무가 없다(도안 자체의 저작권 비보호는
+    `docs/PROVENANCE.md` 참고).
+  - 로컬 파일은 `refs/dotgothic16/`(gitignore 대상, PC-98의 `gensei-pc98`처럼 재현
+    가능한 외부 참조물이라 커밋 안 함). 필요 시 재획득:
+    `https://github.com/google/fonts/tree/main/ofl/dotgothic16`
+  - 에디터: `/api/kana`(글자 목록), `/api/dotgothic16`(참조 렌더, Light 탭 전용)
+- **반각 한글 98자**: 미착수.
 - (원본 약물/기호 결손분 신규 드로잉도 필요 시 여기서 함 — `coverage_report.py` 목록.)
 
 ## 최종 — 전체 11,172자 확장 (도구 개선 필요)
