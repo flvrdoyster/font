@@ -10,6 +10,7 @@ Writes build/DokkaebiDNRGothic(Light).ufo. Compile with fontmake separately.
 import argparse
 import json
 import sys
+import unicodedata
 from fontTools.ttLib import TTFont
 import ufoLib2
 from ufoLib2.objects import Glyph
@@ -26,6 +27,35 @@ UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
 DESCENDER = 0
 CAP = 12 * pf.PX     # rough, informational
+
+# The original bitmap's cmap carries a few codepoints that shouldn't ship:
+# C0/C1 control characters with leftover ink from the legacy code page (a
+# rendering bug -- fontbakery whitespace_ink/control_chars), and soft hyphen
+# (many apps mishandle it; fontbakery soft_hyphen flags its mere presence).
+_CONTROL_RANGES = [(0x00, 0x1F), (0x7F, 0x9F)]
+_EXPLICIT_EXCLUDE = {
+    0xAD,     # soft hyphen
+    0x111,    # dcroat (đ) -- no Đ counterpart in the original bitmap to pair it with
+    0x212B,   # ANGSTROM SIGN -- case-equivalent to Å/å, neither of which exists either
+}
+
+
+def _excluded_codepoint(cp):
+    if cp is None:
+        return False
+    if cp in _EXPLICIT_EXCLUDE:
+        return True
+    return any(lo <= cp <= hi for lo, hi in _CONTROL_RANGES)
+
+
+def _expected_blank(cp):
+    """Whitespace/format characters are legitimately blank. Anything else
+    (symbols, letters, punctuation) that's blank in the original bitmap was
+    just never drawn -- claiming cmap support for an invisible glyph is worse
+    than not listing it (fontbakery contour_count)."""
+    if cp is None:
+        return False
+    return unicodedata.category(chr(cp)) in ("Zs", "Zl", "Zp", "Cf")
 
 
 def build(chars=None, all_glyphs=False, proportional=False):
@@ -57,6 +87,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
         _add_space(ufo, cmap)
 
     added = 0
+    skipped_control = skipped_blank = 0
     for gname in wanted:
         if gname in (".notdef", "space") or gname in ufo:
             continue
@@ -66,6 +97,13 @@ def build(chars=None, all_glyphs=False, proportional=False):
         cp = rev.get(gname)
         if cp in cg.GLYPHS:                    # hand-drawn override
             width_px, rows = cg.GLYPHS[cp]
+        else:
+            if _excluded_codepoint(cp):
+                skipped_control += 1
+                continue
+            if not any(rows) and not _expected_blank(cp):
+                skipped_blank += 1
+                continue
         if proportional:
             adv_px, shift_px = sp.proportional(width_px, rows, cp)
         else:
@@ -84,6 +122,9 @@ def build(chars=None, all_glyphs=False, proportional=False):
         if all_glyphs and added % 2000 == 0:
             print(f"  ...{added} glyphs", flush=True)
 
+    if skipped_control or skipped_blank:
+        print(f"  skipped {skipped_control} control-char/soft-hyphen codepoints, "
+              f"{skipped_blank} blank-in-original codepoints (e.g. registered, Euro)")
     return ufo
 
 
@@ -188,7 +229,7 @@ def _add_notdef(ufo):
 def _add_space(ufo, cmap):
     g = Glyph(name="space")
     g.width = 8 * pf.PX
-    g.unicodes = [0x20]
+    g.unicodes = [0x20, 0xA0]   # regular + non-breaking space, same glyph
     ufo.addGlyph(g)
 
 
