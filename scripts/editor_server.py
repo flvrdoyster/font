@@ -16,6 +16,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              ignoring custom overrides (weight-independent --
                              it's always the 2px Dokkaebi Dinaru source used as
                              a reference for both weights)
+  GET  /api/pc98?s=..     -> per-char grids from the PC-98 BIOS font
+                             (../gensei-pc98/docs/bios/font.bmp, 둥근모꼴), for
+                             the 2,350 KS X 1001 Hangul it carries, via the
+                             recorded tools/pc98_hangul_map.json. Weight-
+                             independent; a second skeleton-reference overlay.
   POST /api/build?weight=regular
                           -> rebuild TTF (build_ufo -> fontmake -> finalize).
                              Regular only for now; Light has no build pipeline
@@ -118,6 +123,46 @@ def original_grids(s):
     return [{"ch": ch, "rows": _original_grid(ch, strike, cmap)} for ch in s]
 
 
+_PC98 = None  # lazy (PIL pixel access, {syllable: [col, row]})
+PC98_BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+PC98_MAP = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
+
+
+def _pc98():
+    """PC-98 BIOS 둥근모꼴 Hangul: the recorded Unicode->cell map
+    (tools/pc98_hangul_map.json, see scripts/pc98_hangul_map.py) plus the
+    bitmap it indexes into. Cell [col, row] -> pixel origin col*16, row*16."""
+    global _PC98
+    if _PC98 is None:
+        from PIL import Image
+        img = Image.open(PC98_BMP).convert("L")
+        with open(PC98_MAP, encoding="utf-8") as f:
+            cells = json.load(f)["cells"]
+        _PC98 = (img.load(), cells)
+    return _PC98
+
+
+def _pc98_grid(ch):
+    try:
+        px, cells = _pc98()
+    except Exception:
+        return None
+    cell = cells.get(ch)
+    if not cell:
+        return None
+    col, row = cell
+    x0, y0 = col * 16, row * 16
+    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
+            for y in range(16)]
+
+
+def pc98_grids(s):
+    """Per-char pixel grids from the PC-98 BIOS font, for the 2,350 KS X 1001
+    완성형 Hangul it carries. Weight-independent -- used as a second
+    skeleton-reference overlay (둥근모꼴) alongside the original bitmap."""
+    return [{"ch": ch, "rows": _pc98_grid(ch)} for ch in s]
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         payload = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -156,6 +201,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/original":
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": original_grids(s)},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/pc98":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": pc98_grids(s)},
                                               ensure_ascii=False))
         self._send(404, json.dumps({"error": "not found"}))
 

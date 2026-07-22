@@ -94,6 +94,7 @@
     border-bottom: 1px solid var(--grid-line); }
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.18; }
+  .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.32; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -208,6 +209,7 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
+    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: 도깨비 디나루 원본 · 파랑: PC-98 골격 (한글만)</p>
 
     <div class="draw-split">
       <div class="draw-canvas">
@@ -215,6 +217,7 @@
           <div class="grid-outer">
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
+            <canvas class="ghost-pc98" id="ghostPc98"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
@@ -447,26 +450,67 @@
     }
     if (ch === curChar) drawGhost();   // redraw once the fetch lands
   }
+  // PC-98 BIOS font skeleton (KS X 1001 Hangul only) -- Light-tab-only second
+  // overlay, drawn in --guide color to stay visually distinct from the
+  // original-bitmap ghost above.
+  let pc98Cache = {};
+  async function fetchPc98(ch) {
+    try {
+      const res = await fetch("api/pc98?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      pc98Cache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      pc98Cache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();
+  }
   function drawGhost() {
     const cv = document.getElementById("ghost");
     const px = 22;
     cv.width = W * px; cv.height = H * px;
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostOn) return;
-
+    if (ghostOn) {
+      let rows;
+      const halfCh = W === 16 ? toHalfwidth(curChar) : null;
+      if (halfCh) {
+        rows = paletteSource(halfCh);
+      } else if (curChar in originalCache) {
+        rows = originalCache[curChar];
+      } else {
+        fetchOriginal(curChar);
+        rows = null;
+      }
+      if (rows) {
+        const gw = rows[0].length;
+        const dx = Math.floor((W - gw) / 2);   // center if narrower than canvas
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+        for (let y = 0; y < H; y++)
+          for (let x = 0; x < gw; x++)
+            if (rows[y][x] === "#")
+              ctx.fillRect((dx + x) * px, y * px, px, px);
+      }
+    }
+    drawPc98Ghost();
+  }
+  function drawPc98Ghost() {
+    const cv = document.getElementById("ghostPc98");
+    const px = 22;
+    cv.width = W * px; cv.height = H * px;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!ghostOn || WEIGHT !== "light") return;
     let rows;
-    const halfCh = W === 16 ? toHalfwidth(curChar) : null;
-    if (halfCh) {
-      rows = paletteSource(halfCh);
+    if (curChar in pc98Cache) {
+      rows = pc98Cache[curChar];
     } else {
-      if (!(curChar in originalCache)) { fetchOriginal(curChar); return; }
-      rows = originalCache[curChar];
+      fetchPc98(curChar);
+      return;
     }
     if (!rows) return;
     const gw = rows[0].length;
-    const dx = Math.floor((W - gw) / 2);          // center if narrower than canvas
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    const dx = Math.floor((W - gw) / 2);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--guide");
     for (let y = 0; y < H; y++)
       for (let x = 0; x < gw; x++)
         if (rows[y][x] === "#")
