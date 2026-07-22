@@ -88,11 +88,12 @@ def build(chars=None, all_glyphs=False, proportional=False):
 
 
 def build_light(proportional=False):
-    """Light weight: Latin/numbers = Regular's hand-drawn glyphs mechanically
-    thinned to 1px stems; Hangul = the composed PC-98-base + our-consonants
-    result for the 2,350 KS X 1001 syllables gensei-pc98 needs (see
-    docs/ROADMAP.md Phase 2 -- this is the deliverable's actual scope, not all
-    11,172 Hangul)."""
+    """Light weight: Latin/numbers and Hangul both follow the same
+    confirmed-first rule -- a glyph hand-drawn and saved in
+    tools/glyphs_light.json is used verbatim; anything unsaved is filled
+    mechanically (Latin/numbers: Regular thinned to 1px; Hangul: the composed
+    PC-98-base + our-consonants result for the 2,350 KS X 1001 syllables
+    gensei-pc98 needs -- see docs/ROADMAP.md Phase 2, not all 11,172 Hangul)."""
     ufo = ufoLib2.Font()
     ufo.info.unitsPerEm = UPEM
     md.apply(ufo, ascender=ASCENDER, descender=DESCENDER,
@@ -100,12 +101,20 @@ def build_light(proportional=False):
     _add_notdef(ufo)
     _add_space(ufo, {})
 
-    latin_src = cg.load_src()
-    light_latin_src = {ch: tv.thin_vertical(grid) for ch, grid in latin_src.items()}
-    light_latin = cg.build(light_latin_src)
-
     with open(cl.REFS, encoding="utf-8") as f:
         refs = json.load(f)
+
+    latin_src = cg.load_src()
+    light_latin_src, latin_hand, latin_thinned = {}, 0, 0
+    for ch, grid in latin_src.items():
+        if ch in refs:
+            light_latin_src[ch] = refs[ch]
+            latin_hand += 1
+        else:
+            light_latin_src[ch] = tv.thin_vertical(grid)
+            latin_thinned += 1
+    light_latin = cg.build(light_latin_src)
+
     pc98 = cl.load_pc98()
     cho_ref, jong_ref = cl.build_indices(refs)
     ks = cl.ks_x1001_order()
@@ -142,7 +151,7 @@ def build_light(proportional=False):
         added += 1
 
     print(f"  light: {added} glyphs added "
-          f"({len(light_latin)} Latin/numbers thinned, "
+          f"({latin_hand} Latin/numbers hand-drawn + {latin_thinned} thinned, "
           f"{hand} Hangul hand-drawn + {gaps} composed)")
     return ufo
 
