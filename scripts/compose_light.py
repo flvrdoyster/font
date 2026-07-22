@@ -7,17 +7,18 @@ stays PC-98. PC-98 places a given consonant at a pixel-stable position within
 each block type, so a consonant we drew once transplants to every syllable of
 that block type.
 
-Method, per target syllable T = (초성 C1, 중성 V, 종성 C2):
-  base = PC98[T]                         # correct vowel + PC-98 consonants
-  jongzone = pixels of PC98 that move when only 종성 varies (= the batchim area)
-  초성 edits: where our (C1, 6-way block type) reference differs from its own
-    PC-98 glyph, restricted to OUTSIDE jongzone
-  종성 edits: where our (C2, V/X-vs-H) reference differs from its PC-98 glyph,
-    restricted to INSIDE jongzone
-Only differing pixels move, so unedited vowel pixels stay exactly PC-98's. The
-zone split is 2-D (not a row cut), so a tall double 초성 (ㄲ/ㄸ/ㅃ...) that
-descends into the batchim rows is still kept whole -- its low pixels don't vary
-with 종성, so they fall outside jongzone.
+Hand-drawn glyphs are authoritative: a syllable present in glyphs_light.json is
+used verbatim. Composition only fills the UNSAVED gaps, and never overwrites a
+glyph the user has drawn.
+
+To compose an unsaved target T = (초성 C1, 중성 V, 종성 C2): swap the canonical
+초성 and 종성 into PC98[T], leaving the vowel as PC-98 drew it.
+  종성 zone = pixels of PC98 that move when only 종성 varies (= the batchim area)
+  초성 zone = pixels that move when only 초성 varies, plus our canonical 초성's
+             own redraw, bounded to the variance bbox so a stray vowel tweak on
+             the canonical glyph can't leak into a different target's vowel
+Zones are 2-D (not a row cut), so a tall double 초성 (ㄲ/ㄸ/ㅃ...) descending
+into the batchim rows stays whole -- its low pixels don't vary with 종성.
 
 Inputs:  ../gensei-pc98/docs/bios/font.bmp, tools/pc98_hangul_map.json,
          tools/glyphs_light.json
@@ -109,15 +110,22 @@ def jong_zone(target, pc98):
 
 
 CLUSTER_JONG = set("ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ")
+ALL_PX = frozenset((y, x) for y in range(16) for x in range(16))
+
+
+def is_syllable(ch):
+    return 0xAC00 <= ord(ch) <= 0xD7A3
 
 
 def build_indices(refs):
-    """Index a {char: rows} reference set by (초성, block type) and (종성,
-    block type). Plain/single-jong references win over cluster ones when both
-    exist for the same slot (sort key), so a cluster reference never displaces
-    a more common plain one."""
+    """Index a {char: rows} reference set by (초성, block type) and (종성, jong
+    block type). Plain/single-jong references win over cluster ones for the
+    same slot (sort key), so a cluster reference never displaces a more common
+    plain one. Non-syllable keys (e.g. Latin glyphs also living in
+    glyphs_light.json) are ignored -- they carry no 초성/중성/종성."""
     cho_ref, jong_ref = {}, {}
-    for ch in sorted(refs, key=lambda c: (decompose(c)[2] in CLUSTER_JONG, c)):
+    syllables = [ch for ch in refs if is_syllable(ch)]
+    for ch in sorted(syllables, key=lambda c: (decompose(c)[2] in CLUSTER_JONG, c)):
         cho, jung, jong = decompose(ch)
         cho_ref.setdefault((cho, cho_bt(jung, jong)), ch)
         if jong:
@@ -140,31 +148,67 @@ def ks_x1001_order():
 
 
 def can_compose(ch, cho_ref, jong_ref):
-    """Whether build_indices(refs) covers every part ch needs."""
+    """Whether the indices cover every part ch needs: a 초성 reference and, if
+    ch has a batchim, a 종성 reference. The vowel always comes from PC-98."""
     cho, jung, jong = decompose(ch)
     if (cho, cho_bt(jung, jong)) not in cho_ref:
         return False
     return not jong or (jong, jong_bt(jung)) in jong_ref
 
 
+def cho_zone(target, pc98, cho_ref, refs):
+    """The 초성 region only. Start from where PC-98 varies as the 초성 changes
+    (that IS the initial, by definition). Add our canonical 초성's own redraw
+    (it can reach past PC-98's initial), but ONLY within the bounding box of
+    that variance -- so a stray vowel tweak on the canonical glyph, which sits
+    far from the initial, can't leak a dot into a different target's vowel."""
+    cho, jung, jong = decompose(target)
+    grids = [g for g in (pc98(compose_ch(c, jung, jong)) for c in CHO)
+             if g is not None]
+    seed = set()
+    if len(grids) >= 2:
+        for y in range(16):
+            for x in range(16):
+                if len({g[y][x] for g in grids}) > 1:
+                    seed.add((y, x))
+    zone = set(seed)
+    cr = cho_ref.get((cho, cho_bt(jung, jong)))
+    if cr:
+        p, r = pc98(cr), refs[cr]
+        jzr = jong_zone(cr, pc98) if decompose(cr)[2] else set()
+        footprint = {(y, x) for (y, x) in ALL_PX
+                     if (y, x) not in jzr and p[y][x] != r[y][x]}
+        if seed:
+            ys = [y for y, x in seed]
+            xs = [x for y, x in seed]
+            y0, y1, x0, x1 = min(ys) - 1, max(ys) + 1, min(xs) - 1, max(xs) + 1
+            footprint = {(y, x) for (y, x) in footprint
+                         if y0 <= y <= y1 and x0 <= x <= x1}
+        zone |= footprint
+    return zone
+
+
 def compose(target, pc98, refs, cho_ref, jong_ref):
+    """Rebuild target over the PC-98 둥근모꼴 base: swap in the canonical 초성
+    (within cho_zone) and, if present, 종성 (within the batchim area). The vowel
+    is left exactly as PC-98 drew it. Only pixels where a reference differs from
+    PC-98 move, so untouched regions stay verbatim PC-98."""
     cho, jung, jong = decompose(target)
     out = [list(row) for row in pc98(target)]
 
     def apply(ref_ch, keep):
+        if ref_ch is None:
+            return
         r, p = refs[ref_ch], pc98(ref_ch)
-        for y in range(16):
-            for x in range(16):
-                if (y, x) in keep and r[y][x] != p[y][x]:
-                    out[y][x] = r[y][x]
+        for (y, x) in keep:
+            if r[y][x] != p[y][x]:
+                out[y][x] = r[y][x]
 
-    all_px = {(y, x) for y in range(16) for x in range(16)}
+    jz = jong_zone(target, pc98) if jong else set()
+    cz = cho_zone(target, pc98, cho_ref, refs) - jz
+    apply(cho_ref.get((cho, cho_bt(jung, jong))), cz)
     if jong:
-        zone = jong_zone(target, pc98)
-        apply(cho_ref[(cho, cho_bt(jung, jong))], all_px - zone)   # 초성 outside batchim
-        apply(jong_ref[(jong, jong_bt(jung))], zone)               # 종성 inside batchim
-    else:
-        apply(cho_ref[(cho, cho_bt(jung, jong))], all_px)
+        apply(jong_ref.get((jong, jong_bt(jung))), jz)
 
     return ["".join(row) for row in out]
 
@@ -179,29 +223,21 @@ def main():
     cho_ref, jong_ref = build_indices(refs)
     ks = ks_x1001_order()
 
-    composed = {ch: compose(ch, pc98, refs, cho_ref, jong_ref) for ch in ks}
-
-    # round-trip check: recomposing a hand-drawn reference should reproduce it
-    worst = []
-    for ch in refs:
-        if ch in composed:
-            d = sum(composed[ch][y][x] != refs[ch][y][x]
-                    for y in range(16) for x in range(16))
-            if d:
-                worst.append((d, ch))
-    worst.sort(reverse=True)
+    # hand-drawn glyphs are authoritative; compose only fills the unsaved gaps
+    composed = {ch: (refs[ch] if ch in refs else
+                     compose(ch, pc98, refs, cho_ref, jong_ref))
+                for ch in ks if ch in refs or can_compose(ch, cho_ref, jong_ref)}
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(composed, open(OUT, "w", encoding="utf-8"),
               ensure_ascii=False, indent=0)
 
-    print(f"composed {len(composed)} syllables -> {OUT}")
-    print(f"round-trip on {len(refs)} references: "
-          f"{len(refs) - len(worst)} exact, {len(worst)} differ "
-          f"(differences are benign: hand-drawing variance between references "
-          f"that share a consonant+block-type, normalized to one canonical form)")
-    for d, ch in worst[:15]:
-        print(f"    {ch}: {d}px")
+    hand = sum(1 for ch in composed if ch in refs)
+    gaps = len(composed) - hand
+    missing = len(ks) - len(composed)
+    print(f"{len(composed)}/{len(ks)} syllables -> {OUT}")
+    print(f"  {hand} hand-drawn (verbatim) + {gaps} composed"
+          + (f", {missing} uncomposable (missing 초성/종성 refs)" if missing else ""))
 
     if args.specimen:
         write_specimen(composed, pc98)

@@ -3,7 +3,7 @@
   :root {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4;
+    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
     --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
@@ -11,18 +11,18 @@
     :root {
       --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
       --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-      --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0;
+      --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
     }
   }
   :root[data-theme="light"] {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4;
+    --guide: #2f78ab; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
   }
   :root[data-theme="dark"] {
     --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
     --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-    --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0;
+    --guide: #62a6d6; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
   }
 
   * { box-sizing: border-box; }
@@ -124,18 +124,18 @@
   .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 5px; }
   .palette-scroll { max-height: 320px; overflow-y: auto; border: 1px solid var(--faint);
     border-radius: 8px; padding: 8px; }
-  .swatch { width: 30px; height: 30px; border: 1px solid var(--faint); border-radius: 6px;
-    background: var(--cell-off); cursor: pointer; padding: 0; display: grid;
-    place-items: center; overflow: hidden; }
+  .swatch { position: relative; width: 30px; height: 30px; border: 1px solid var(--faint);
+    border-radius: 6px; background: var(--cell-off); cursor: pointer; padding: 0;
+    display: grid; place-items: center; overflow: hidden; }
   .swatch:hover { border-color: var(--accent); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .swatch.saved { border-color: var(--confirm); }
+  .swatch.saved::after { content: ""; position: absolute; top: 2px; right: 2px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--confirm); }
   .swatch canvas { image-rendering: pixelated; max-width: 24px; max-height: 24px;
     width: auto; height: auto; }
 
   .palette-group + .palette-group { margin-top: 16px; }
-  .weight-only[data-weight="light"] { display: none; }
-  :root[data-active-weight="light"] .weight-only[data-weight="regular"] { display: none; }
-  :root[data-active-weight="light"] .weight-only[data-weight="light"] { display: block; }
   .sublabel { font-size: 11px; color: var(--muted); margin: 0 0 8px; letter-spacing: 0.03em; }
   .hint-inline { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
 
@@ -190,8 +190,8 @@
   </header>
 
   <div class="weight-tabs" role="tablist" aria-label="웨이트">
-    <button class="wtab" data-weight="regular" role="tab" aria-selected="true">Regular <span class="wtab-note">라틴 · 2px</span></button>
-    <button class="wtab" data-weight="light" role="tab" aria-selected="false">Light <span class="wtab-note">한글 조합형 · 1px</span></button>
+    <button class="wtab" data-weight="regular" role="tab" aria-selected="true">Regular <span class="wtab-note">2px 줄기</span></button>
+    <button class="wtab" data-weight="light" role="tab" aria-selected="false">Light <span class="wtab-note">1px 줄기</span></button>
   </div>
 
   <!-- 1. 글자 그리기: 캔버스 · 1×/2×/3× 미리보기 · 내보내기 -->
@@ -211,7 +211,7 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
-    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: 도깨비 디나루 원본 · 파랑: PC-98 골격 (한글만)</p>
+    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격 (Light 한글만)</p>
 
     <div class="draw-split">
       <div class="draw-canvas">
@@ -268,26 +268,23 @@
       <button data-pvscale="4" aria-pressed="false">4×</button>
     </div>
     <div class="pvscroll"><canvas id="pvText"></canvas></div>
-    <p class="hint">편집 중인 글자는 저장 전 상태가 즉시 반영됩니다.
-       한글 등 원본 글리프는 서버 연결 시 표시됩니다.</p>
   </section>
 
   <!-- 3. 글자 불러오기 (팔레트) -->
   <section class="card tier">
-    <p class="label">글자 불러오기</p>
-    <div class="palette-group weight-only" data-weight="regular">
+    <p class="label">글자 불러오기 <span class="hint-inline">초록 = 저장된 확정본, 나머지 = 미리보기 · 현재 웨이트 기준</span></p>
+    <div class="palette-group">
       <p class="sublabel">반각 A–Z · a–z · 0–9</p>
       <div class="palette" id="paletteHalf"></div>
     </div>
-    <div class="palette-group weight-only" data-weight="regular">
-      <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９ <span class="hint-inline">커스텀이 없으면 원본 비트맵으로 시작합니다</span></p>
+    <div class="palette-group">
+      <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９</p>
       <div class="palette" id="paletteFull"></div>
     </div>
-    <div class="palette-group weight-only" data-weight="light">
-      <p class="sublabel">완성형 전체 (KS X 1001, 2,350자) <span class="hint-inline">기본값은 조합 결과이며, 개별 글자를 직접 다듬어 저장할 수 있습니다</span></p>
+    <div class="palette-group">
+      <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
       <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
     </div>
-    <!-- 추가 그룹은 buildPaletteGroup(containerId, chars)를 재사용해 확장 -->
   </section>
 
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -435,11 +432,13 @@
   }
 
   // ---- ghost overlay ----
-  // Fullwidth Latin canvas -> ghost is the halfwidth counterpart (current,
-  // possibly custom). Everything else (halfwidth canvas, or fullwidth chars
-  // with no halfwidth counterpart -- Hangul, kana, ...) -> ghost is the
-  // ORIGINAL bitmap of the same character (ignoring any custom override),
-  // as a drawing reference while redesigning it.
+  // Light tab: grey ghost is always this character's Regular-weight glyph
+  // (see fetchRegular above).
+  // Regular tab: fullwidth Latin -> ghost is the halfwidth counterpart
+  // (current, possibly custom). Everything else (halfwidth canvas, or
+  // fullwidth chars with no halfwidth counterpart -- Hangul, kana, ...) ->
+  // ghost is the ORIGINAL bitmap of the same character (ignoring any custom
+  // override), as a drawing reference while redesigning it.
   function toHalfwidth(ch) {
     const c = ch.codePointAt(0);
     if (c >= 0xFF21 && c <= 0xFF3A) return String.fromCodePoint(65 + (c - 0xFF21));
@@ -457,6 +456,20 @@
       originalCache[ch] = null;
     }
     if (ch === curChar) drawGhost();   // redraw once the fetch lands
+  }
+  // Light tab: the grey ghost is always this character's Regular-weight glyph
+  // (custom Latin if drawn, else the original bitmap -- same thing Regular
+  // Hangul already is), regardless of halfwidth/fullwidth substitution.
+  let regularCache = {};
+  async function fetchRegular(ch) {
+    try {
+      const res = await fetch("api/text?weight=regular&s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      regularCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      regularCache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();
   }
   // PC-98 BIOS font skeleton (KS X 1001 Hangul only) -- Light-tab-only second
   // overlay, drawn in --guide color to stay visually distinct from the
@@ -480,14 +493,23 @@
     ctx.clearRect(0, 0, cv.width, cv.height);
     if (ghostOn) {
       let rows;
-      const halfCh = W === 16 ? toHalfwidth(curChar) : null;
-      if (halfCh) {
-        rows = paletteSource(halfCh);
-      } else if (curChar in originalCache) {
-        rows = originalCache[curChar];
+      if (WEIGHT === "light") {
+        if (curChar in regularCache) {
+          rows = regularCache[curChar];
+        } else {
+          fetchRegular(curChar);
+          rows = null;
+        }
       } else {
-        fetchOriginal(curChar);
-        rows = null;
+        const halfCh = W === 16 ? toHalfwidth(curChar) : null;
+        if (halfCh) {
+          rows = paletteSource(halfCh);
+        } else if (curChar in originalCache) {
+          rows = originalCache[curChar];
+        } else {
+          fetchOriginal(curChar);
+          rows = null;
+        }
       }
       if (rows) {
         const gw = rows[0].length;
@@ -623,8 +645,11 @@
     for (const ch of chars) {
       const rows = paletteSource(ch);
       if (!rows) continue;
+      const saved = !!DATA[ch];
       const s = document.createElement("button");
-      s.className = "swatch"; s.dataset.ch = ch; s.title = ch;
+      s.className = "swatch" + (saved ? " saved" : "");
+      s.dataset.ch = ch;
+      s.title = ch + (saved ? " (저장된 확정본)" : " (조합/원본 미리보기)");
       const cv = document.createElement("canvas");
       const g = rowsToCells(rows), w = g[0].length;
       cv.width = w; cv.height = H;
@@ -643,25 +668,18 @@
     buildPaletteGroup("paletteAll2350", KS2350_CHARS);
   }
   async function loadPaletteData() {
+    // Palette is the same character set for both weights; the swatch content
+    // just follows the active weight (server fills unsaved glyphs per weight).
     paletteData = {};
-    // Latin palette groups are always Regular; the 2,350 group is always
-    // Light -- each fetched with its own weight regardless of which tab is
-    // currently active, so switching tabs never has to re-fetch. Its default
-    // is the server's composed PC-98+consonant preview, not the raw
-    // original (see editor_server.py text_grids).
-    const jobs = [
-      ["regular", HALF_CHARS + FULL_CHARS],
-      ["light", KS2350_CHARS.join("")],
-    ];
-    for (const [weight, chars] of jobs) {
-      try {
-        const res = await fetch("api/text?weight=" + weight + "&s=" + encodeURIComponent(chars),
-                                { cache: "no-store" });
-        if (!res.ok) continue;
+    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("");
+    try {
+      const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(chars),
+                              { cache: "no-store" });
+      if (res.ok) {
         const j = await res.json();
         for (const item of j.chars) if (item.rows) paletteData[item.ch] = item.rows;
-      } catch (e) { /* offline: palette falls back to customized chars only */ }
-    }
+      }
+    } catch (e) { /* offline: palette falls back to customized chars only */ }
   }
   function markPalette() {
     document.querySelectorAll(".swatch").forEach(s =>
@@ -805,12 +823,12 @@
   async function switchWeight(weight) {
     if (weight === WEIGHT) return;
     WEIGHT = weight;
-    document.documentElement.dataset.activeWeight = weight;
     document.querySelectorAll(".wtab").forEach(b =>
       b.setAttribute("aria-selected", b.dataset.weight === weight ? "true" : "false"));
     if (SERVER) {
       try {
         DATA = await fetchWeightData(weight);
+        await loadPaletteData();     // refetch swatch content for the new weight
       } catch (e) {
         DATA = {};
       }

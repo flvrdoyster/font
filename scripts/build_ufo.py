@@ -109,16 +109,22 @@ def build_light(proportional=False):
     pc98 = cl.load_pc98()
     cho_ref, jong_ref = cl.build_indices(refs)
     ks = cl.ks_x1001_order()
-    composable = [ch for ch in ks if cl.can_compose(ch, cho_ref, jong_ref)]
-    light_hangul_src = {ch: cl.compose(ch, pc98, refs, cho_ref, jong_ref)
-                        for ch in composable}
+    # hand-drawn glyphs are authoritative; compose only fills the unsaved gaps
+    light_hangul_src, hand, gaps = {}, 0, 0
+    for ch in ks:
+        if ch in refs:
+            light_hangul_src[ch] = refs[ch]
+            hand += 1
+        elif cl.can_compose(ch, cho_ref, jong_ref):
+            light_hangul_src[ch] = cl.compose(ch, pc98, refs, cho_ref, jong_ref)
+            gaps += 1
     light_hangul = cg.build(light_hangul_src)
 
-    missing = len(ks) - len(composable)
+    missing = len(ks) - len(light_hangul_src)
     if missing:
         skipped = "".join(ch for ch in ks if ch not in light_hangul_src)[:30]
         print(f"  light: {missing}/{len(ks)} KS X 1001 Hangul skipped "
-              f"(missing consonant/vowel refs): {skipped}...")
+              f"(missing 초성/종성 refs): {skipped}...")
 
     added = 0
     for cp, (width_px, rows) in {**light_latin, **light_hangul}.items():
@@ -136,7 +142,8 @@ def build_light(proportional=False):
         added += 1
 
     print(f"  light: {added} glyphs added "
-          f"({len(light_latin)} Latin/numbers thinned, {len(light_hangul)} Hangul composed)")
+          f"({len(light_latin)} Latin/numbers thinned, "
+          f"{hand} Hangul hand-drawn + {gaps} composed)")
     return ufo
 
 

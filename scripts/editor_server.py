@@ -122,12 +122,32 @@ def _composer():
     return _COMPOSER
 
 
+_THINNER = False  # False = not yet loaded; None = load failed; else the module
+
+
+def _thinner():
+    """tools/thin_vertical.py, for the Light Latin/digit preview fallback
+    (thin the Regular custom glyph) -- see text_grids."""
+    global _THINNER
+    if _THINNER is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import thin_vertical
+            _THINNER = thin_vertical
+        except Exception:
+            _THINNER = None
+    return _THINNER
+
+
 def text_grids(weight, s):
     """Per-char pixel grids for preview: custom glyphs (for this weight)
-    override the original. For Light-weight Hangul with no custom entry yet,
-    fall back to the composed PC-98-base + our-consonants default (see
-    scripts/compose_light.py) instead of the raw 2px original, since that's
-    what the glyph will actually become."""
+    override the original. With no custom entry yet, Light falls back to a
+    weight-appropriate default instead of the raw 2px original:
+      - Hangul: the composed PC-98-base + our-consonants default (see
+        scripts/compose_light.py)
+      - Latin/digits: the Regular custom glyph thinned to 1px (see
+        tools/thin_vertical.py) -- this is what build_light actually uses,
+        so the editor should preview the same thing."""
     custom = read_glyphs(weight)
     try:
         strike, cmap = _orig()
@@ -135,17 +155,27 @@ def text_grids(weight, s):
         strike, cmap = {}, {}
     cl = None
     cho_ref = jong_ref = None
+    regular = tv = None
     if weight == "light":
         cl = _composer()
         if cl is not None:
             cho_ref, jong_ref = cl.build_indices(custom)
+        tv = _thinner()
+        if tv is not None:
+            regular = read_glyphs("regular")
     out = []
     for ch in s:
         grid = custom.get(ch)
-        if grid is None and cl is not None and 0xAC00 <= ord(ch) <= 0xD7A3:
+        if grid is None and weight == "light" and 0xAC00 <= ord(ch) <= 0xD7A3:
+            if cl is not None:
+                try:
+                    if cl.can_compose(ch, cho_ref, jong_ref):
+                        grid = cl.compose(ch, _pc98_grid, custom, cho_ref, jong_ref)
+                except Exception:
+                    grid = None
+        elif grid is None and tv is not None and regular is not None and ch in regular:
             try:
-                if cl.can_compose(ch, cho_ref, jong_ref):
-                    grid = cl.compose(ch, _pc98_grid, custom, cho_ref, jong_ref)
+                grid = tv.thin_vertical(regular[ch])
             except Exception:
                 grid = None
         if grid is None:
