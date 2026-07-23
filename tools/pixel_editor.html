@@ -101,8 +101,7 @@
     border-bottom: 1px solid var(--grid-line); }
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
-  .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
-  .ghost-kanaref { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
+  .ghost-ref2 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -221,6 +220,8 @@
         <button id="guideBtn" aria-pressed="true">안내선</button>
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
+      <label class="field"><span>참고</span>
+        <input type="text" id="refCharInput" maxlength="2" value="" autocomplete="off"></label>
     </div>
     <div class="draw-split">
       <div class="draw-canvas">
@@ -228,8 +229,7 @@
           <div class="grid-outer">
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
-            <canvas class="ghost-pc98" id="ghostPc98"></canvas>
-            <canvas class="ghost-kanaref" id="ghostKanaRef"></canvas>
+            <canvas class="ghost-ref2" id="ghostRef2"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
@@ -466,167 +466,60 @@
     }
   }
 
-  // ---- ghost overlay ----
-  // Light tab: grey ghost is always this character's Regular-weight glyph
-  // (see fetchRegular above).
-  // Regular tab: fullwidth Latin -> ghost is the halfwidth counterpart
-  // (current, possibly custom). Everything else (halfwidth canvas, or
-  // fullwidth chars with no halfwidth counterpart -- Hangul, kana, ...) ->
-  // ghost is the ORIGINAL bitmap of the same character (ignoring any custom
-  // override), as a drawing reference while redesigning it.
-  function toHalfwidth(ch) {
-    const c = ch.codePointAt(0);
-    if (c >= 0xFF21 && c <= 0xFF3A) return String.fromCodePoint(65 + (c - 0xFF21));
-    if (c >= 0xFF41 && c <= 0xFF5A) return String.fromCodePoint(97 + (c - 0xFF41));
-    if (c >= 0xFF10 && c <= 0xFF19) return String.fromCodePoint(48 + (c - 0xFF10));
-    return null;
-  }
-  let originalCache = {};
-  async function fetchOriginal(ch) {
-    try {
-      const res = await fetch("api/original?s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      originalCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      originalCache[ch] = null;
-    }
-    if (ch === curChar) drawGhost();   // redraw once the fetch lands
-  }
-  // Light tab: the grey ghost is always this character's Regular-weight glyph
-  // (custom Latin if drawn, else the original bitmap -- same thing Regular
-  // Hangul already is), regardless of halfwidth/fullwidth substitution.
-  let regularCache = {};
-  async function fetchRegular(ch) {
-    try {
-      const res = await fetch("api/text?weight=regular&s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      regularCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      regularCache[ch] = null;
-    }
-    if (ch === curChar) drawGhost();
-  }
-  // PC-98 BIOS font skeleton (KS X 1001 Hangul only) -- Light-tab-only second
-  // overlay, drawn in --guide color to stay visually distinct from the
-  // original-bitmap ghost above.
-  let pc98Cache = {};
-  async function fetchPc98(ch) {
-    try {
-      const res = await fetch("api/pc98?s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      pc98Cache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      pc98Cache[ch] = null;
-    }
-    if (ch === curChar) drawGhost();
-  }
-  // Kana skeleton reference (Noto Sans JP, see editor_server.py) --
-  // Light-tab-only third overlay, kana only, visual reference for
-  // hand-drawing kana in our own angular style; never saved/embedded.
-  // Baseline/proportion reference only -- it's an ordinary vector sans, so
-  // its loops are traced arcs; redraw them as chamfered rectangles (see
-  // Hangul ㅇ) rather than following its curves. Drawn in --guide2 to stay
-  // distinct from the grey Regular ghost and the blue PC-98 overlay.
+  // ---- ghost overlays ----
+  // Two overlays, both gated by the 참조 오버레이 toggle:
+  //  - grey (#ghost): Regular-tab kana only -- the confirmed Light glyph of the
+  //    current char, to thicken 1px -> 2px against.
+  //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
+  //    CURRENT weight, so a similar already-drawn kana can be traced against.
   function isKana(ch) {
     const c = ch.codePointAt(0);
     return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
   }
-  let kanaRefCache = {};
-  async function fetchKanaRef(ch) {
+  let lightCache = {};
+  async function fetchLight(ch) {
     try {
-      const res = await fetch("api/kanaref?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const res = await fetch("api/text?weight=light&s=" + encodeURIComponent(ch), { cache: "no-store" });
       const j = await res.json();
-      kanaRefCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+      lightCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
     } catch (e) {
-      kanaRefCache[ch] = null;
+      lightCache[ch] = null;
     }
     if (ch === curChar) drawGhost();
   }
+  function paintGhost(cv, rows, colorVar) {
+    const px = 22;
+    cv.width = W * px; cv.height = H * px;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!rows) return;
+    const gw = rows[0].length;
+    const dx = Math.floor((W - gw) / 2);   // center if narrower than canvas
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(colorVar);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < gw; x++)
+        if (rows[y][x] === "#")
+          ctx.fillRect((dx + x) * px, y * px, px, px);
+  }
   function drawGhost() {
-    const cv = document.getElementById("ghost");
-    const px = 22;
-    cv.width = W * px; cv.height = H * px;
-    const ctx = cv.getContext("2d");
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    if (ghostOn) {
-      let rows;
-      if (WEIGHT === "light") {
-        if (curChar in regularCache) {
-          rows = regularCache[curChar];
-        } else {
-          fetchRegular(curChar);
-          rows = null;
-        }
-      } else {
-        const halfCh = W === 16 ? toHalfwidth(curChar) : null;
-        if (halfCh) {
-          rows = paletteSource(halfCh);
-        } else if (curChar in originalCache) {
-          rows = originalCache[curChar];
-        } else {
-          fetchOriginal(curChar);
-          rows = null;
-        }
-      }
-      if (rows) {
-        const gw = rows[0].length;
-        const dx = Math.floor((W - gw) / 2);   // center if narrower than canvas
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-        for (let y = 0; y < H; y++)
-          for (let x = 0; x < gw; x++)
-            if (rows[y][x] === "#")
-              ctx.fillRect((dx + x) * px, y * px, px, px);
-      }
+    let rows = null;
+    if (ghostOn && WEIGHT === "regular" && isKana(curChar)) {
+      if (curChar in lightCache) rows = lightCache[curChar];
+      else fetchLight(curChar);   // redraws when it lands
     }
-    drawPc98Ghost();
-    drawKanaRefGhost();
+    paintGhost(document.getElementById("ghost"), rows, "--ink");
+    drawRefGhost();
   }
-  function drawPc98Ghost() {
-    const cv = document.getElementById("ghostPc98");
-    const px = 22;
-    cv.width = W * px; cv.height = H * px;
-    const ctx = cv.getContext("2d");
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostOn || WEIGHT !== "light") return;
-    let rows;
-    if (curChar in pc98Cache) {
-      rows = pc98Cache[curChar];
-    } else {
-      fetchPc98(curChar);
-      return;
-    }
-    if (!rows) return;
-    const gw = rows[0].length;
-    const dx = Math.floor((W - gw) / 2);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--guide");
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < gw; x++)
-        if (rows[y][x] === "#")
-          ctx.fillRect((dx + x) * px, y * px, px, px);
+  let refChar = "";
+  function drawRefGhost() {
+    let rows = null;
+    if (ghostOn && refChar && refChar !== curChar) rows = paletteSource(refChar);
+    paintGhost(document.getElementById("ghostRef2"), rows, "--guide2");
   }
-  function drawKanaRefGhost() {
-    const cv = document.getElementById("ghostKanaRef");
-    const px = 22;
-    cv.width = W * px; cv.height = H * px;
-    const ctx = cv.getContext("2d");
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostOn || WEIGHT !== "light" || !isKana(curChar)) return;
-    let rows;
-    if (curChar in kanaRefCache) {
-      rows = kanaRefCache[curChar];
-    } else {
-      fetchKanaRef(curChar);
-      return;
-    }
-    if (!rows) return;
-    const gw = rows[0].length;
-    const dx = Math.floor((W - gw) / 2);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--guide2");
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < gw; x++)
-        if (rows[y][x] === "#")
-          ctx.fillRect((dx + x) * px, y * px, px, px);
-  }
+  document.getElementById("refCharInput").addEventListener("input", e => {
+    refChar = Array.from(e.target.value)[0] || "";
+    drawRefGhost();
+  });
 
   // ---- preview ----
   function renderTo(canvas, scale) {
