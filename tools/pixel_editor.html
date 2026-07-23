@@ -102,7 +102,7 @@
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
   .ghost-pc98 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
-  .ghost-meiryo { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
+  .ghost-kanaref { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -221,7 +221,7 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
-    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: Meiryo(Light 가나만, 참조 전용)</p>
+    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: Noto Sans JP(Light 가나만, 베이스라인/비율 참조 전용 — 곡선은 챔퍼드 사각형으로 새로 그릴 것)</p>
 
     <div class="draw-split">
       <div class="draw-canvas">
@@ -230,7 +230,7 @@
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
             <canvas class="ghost-pc98" id="ghostPc98"></canvas>
-            <canvas class="ghost-meiryo" id="ghostMeiryo"></canvas>
+            <canvas class="ghost-kanaref" id="ghostKanaRef"></canvas>
             <div class="guides" id="guides"></div>
           </div>
         </div>
@@ -271,7 +271,7 @@
   <section class="card tier">
     <p class="label">텍스트 미리보기</p>
     <input type="text" id="previewText"
-      value="다람쥐 헌 쳇바퀴에 타고파 Dokkaebi DNR ２０２６－０１－０１ vs 2026-01-01 한글ＡＢＣ조화"
+      value="1990년대 PC-98 게임의 ひらがな와 カタカナ를 16×16 도트로 되살린 도깨비DNR 고딕 v0.3, 다람쥐 헌 쳇바퀴에 타고파"
       spellcheck="false" autocomplete="off">
     <div class="seg" role="group" aria-label="미리보기 배율" style="margin-top:8px">
       <button data-pvscale="2" aria-pressed="false">2×</button>
@@ -307,7 +307,7 @@
     </div>
     <div class="palette-cat" data-cat="kana" hidden>
       <div class="palette-group">
-        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = Meiryo — 모양만 참고, 직접 새로 그립니다</span></p>
+        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = Noto Sans JP — 베이스라인/비율만 참고, 곡선은 챔퍼드 사각형으로 새로 그립니다</span></p>
         <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
       </div>
     </div>
@@ -521,22 +521,25 @@
     }
     if (ch === curChar) drawGhost();
   }
-  // Meiryo -- Light-tab-only third overlay, kana only, visual reference for
-  // hand-drawing kana in our own angular style; never saved/embedded. Drawn
-  // in --guide2 to stay distinct from the grey Regular ghost and the blue
-  // PC-98 overlay.
+  // Kana skeleton reference (Noto Sans JP, see editor_server.py) --
+  // Light-tab-only third overlay, kana only, visual reference for
+  // hand-drawing kana in our own angular style; never saved/embedded.
+  // Baseline/proportion reference only -- it's an ordinary vector sans, so
+  // its loops are traced arcs; redraw them as chamfered rectangles (see
+  // Hangul ㅇ) rather than following its curves. Drawn in --guide2 to stay
+  // distinct from the grey Regular ghost and the blue PC-98 overlay.
   function isKana(ch) {
     const c = ch.codePointAt(0);
     return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
   }
-  let meiryoCache = {};
-  async function fetchMeiryo(ch) {
+  let kanaRefCache = {};
+  async function fetchKanaRef(ch) {
     try {
-      const res = await fetch("api/meiryo?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const res = await fetch("api/kanaref?s=" + encodeURIComponent(ch), { cache: "no-store" });
       const j = await res.json();
-      meiryoCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+      kanaRefCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
     } catch (e) {
-      meiryoCache[ch] = null;
+      kanaRefCache[ch] = null;
     }
     if (ch === curChar) drawGhost();
   }
@@ -577,7 +580,7 @@
       }
     }
     drawPc98Ghost();
-    drawMeiryoGhost();
+    drawKanaRefGhost();
   }
   function drawPc98Ghost() {
     const cv = document.getElementById("ghostPc98");
@@ -602,18 +605,18 @@
         if (rows[y][x] === "#")
           ctx.fillRect((dx + x) * px, y * px, px, px);
   }
-  function drawMeiryoGhost() {
-    const cv = document.getElementById("ghostMeiryo");
+  function drawKanaRefGhost() {
+    const cv = document.getElementById("ghostKanaRef");
     const px = 22;
     cv.width = W * px; cv.height = H * px;
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, cv.width, cv.height);
     if (!ghostOn || WEIGHT !== "light" || !isKana(curChar)) return;
     let rows;
-    if (curChar in meiryoCache) {
-      rows = meiryoCache[curChar];
+    if (curChar in kanaRefCache) {
+      rows = kanaRefCache[curChar];
     } else {
-      fetchMeiryo(curChar);
+      fetchKanaRef(curChar);
       return;
     }
     if (!rows) return;

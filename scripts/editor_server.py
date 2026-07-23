@@ -29,9 +29,8 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              for the editor's full-coverage Light palette.
   GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
                              list), for the editor's kana palette (Phase 3).
-  GET  /api/meiryo?s=..   -> per-char grids rasterized from Meiryo (read live
-                             from the local Office install, never copied into
-                             the repo) at its native 16px size. Kana only,
+  GET  /api/kanaref?s=..  -> per-char grids rasterized from the kana skeleton
+                             reference font (refs/, gitignored). Kana only,
                              reference-only overlay -- never embedded in
                              built output.
   POST /api/build?weight=regular|light
@@ -451,37 +450,56 @@ def ks2350_chars():
         return []
 
 
-_MEIRYO = None  # lazy freetype Face
-# Read in place from the user's own Microsoft Office install -- never copied
-# into the repo. Local reference use only (never embedded in built output),
-# so this doesn't redistribute Meiryo's (non-free) license in any way.
-MEIRYO_TTC = ("/Applications/Microsoft Word.app/Contents/Resources/DFonts/meiryo.ttc")
-MEIRYO_FACE_INDEX = 0   # "Meiryo Regular" (the .ttc also has Italic + "Meiryo UI" faces)
-KANA_BASELINE_ROW = 13   # matches the editor's baseline guide row
+# Kana skeleton/proportion reference. Named by role (KANA_REF_*), not by the
+# specific font, since this has already been swapped repeatedly (Meiryo ->
+# PixelMplus12 -> Noto Sans JP -> Hiragino Kaku Gothic -> MS UI Gothic ->
+# MS Gothic) chasing something plain, angular, and full-cell enough at small
+# sizes -- swapping the font again should mean changing this path/size, not
+# renaming every call site. Currently **MS Gothic** (refs/msgothic.ttf, user-
+# supplied, gitignored), same family/era as Windows' Gulim/Dotum for Korean
+# -- pre-ClearType, hand-drawn embedded bitmap strikes rather than a scaled
+# outline (not a traced curve, so it reads far more angular/legible at this
+# size than Hiragino or Noto did). Picked over MS UI Gothic (tried first)
+# because MS Gothic is the full monospace-cell variant -- MS UI Gothic's
+# narrower proportional cells read too narrow next to our fixed-width grid.
+# Genuinely pixel-hinted at this exact size (not a traced curve), so its
+# loops are already close to the chamfered-rectangle grammar (see Hangul ㅇ
+# in glyphs_light.json) -- still redraw by hand rather than copying pixels,
+# but there's much less to "square off" than with the earlier vector-font
+# references.
+KANA_REF_TTF = os.path.join(ROOT, "refs", "msgothic.ttf")
+KANA_REF_PX = 12         # this face has real embedded bitmap strikes at
+                          # every pixel size 12-22; ink is a tight 11 rows
+                          # at this size for the samples checked (ら/わ/が/あ)
+KANA_REF_BASELINE_ROW = 12  # last row of the cap~baseline band (editor's
+                             # baseline guide sits at row 13) -- ink bottom
+                             # is pinned here, not centered in the band.
+_KANA_REF = None            # lazy freetype Face
 
 
 def _is_kana(ch):
     return (0x3041 <= ord(ch) <= 0x30FF) or (0xFF61 <= ord(ch) <= 0xFF9F)
 
 
-def _meiryo():
-    """Meiryo Regular, read directly from the licensed Office install -- a
-    visual-only reference overlay for hand-drawing kana in our own style.
-    Never embedded in built output, kana only."""
-    global _MEIRYO
-    if _MEIRYO is None:
+def _kana_ref():
+    """Kana skeleton reference face, a visual-only overlay for hand-drawing
+    kana in our own angular style. Never embedded in built output, kana only."""
+    global _KANA_REF
+    if _KANA_REF is None:
         import freetype
-        face = freetype.Face(MEIRYO_TTC, MEIRYO_FACE_INDEX)
-        face.set_pixel_sizes(16, 16)
-        _MEIRYO = face
-    return _MEIRYO
+        face = freetype.Face(KANA_REF_TTF)
+        # width=0 -> derive from height, required to land on the matching
+        # embedded bitmap strike rather than an (absent/scaled) outline.
+        face.set_pixel_sizes(0, KANA_REF_PX)
+        _KANA_REF = face
+    return _KANA_REF
 
 
-def _meiryo_grid(ch):
+def _kana_ref_grid(ch):
     if not _is_kana(ch):
         return None
     try:
-        face = _meiryo()
+        face = _kana_ref()
     except Exception:
         return None
     import freetype
@@ -493,25 +511,40 @@ def _meiryo_grid(ch):
     if slot.bitmap.width == 0 or slot.bitmap.rows == 0:
         return None  # e.g. .notdef / unsupported char
     bmp = slot.bitmap
+    bits = [[(bmp.buffer[y * bmp.pitch + x // 8] >> (7 - (x % 8))) & 1
+             for x in range(bmp.width)] for y in range(bmp.rows)]
+    ink_rows = [y for y, row in enumerate(bits) if any(row)]
+    ink_cols = [x for x in range(bmp.width) if any(row[x] for row in bits)]
+    if not ink_rows or not ink_cols:
+        return None  # blank glyph (e.g. space)
+    row_min, row_max = min(ink_rows), max(ink_rows)
+    col_min, col_max = min(ink_cols), max(ink_cols)
     grid = [["."] * 16 for _ in range(16)]
-    for y in range(bmp.rows):
-        gy = KANA_BASELINE_ROW - slot.bitmap_top + y
+    # Crop to the *tight* ink bounding box (this font pads a blank trailing
+    # row in its bitmap allocation) then center horizontally / pin the ink
+    # bottom to our baseline row -- ignoring the font's own metrics
+    # (left-side bearing, baseline) entirely, since this is a proportion/
+    # size guide, not a typographically-correct overlay.
+    dx = (16 - (col_max - col_min + 1)) // 2 - col_min
+    dy = KANA_REF_BASELINE_ROW - row_max
+    for y in range(row_min, row_max + 1):
+        gy = dy + y
         if not (0 <= gy < 16):
             continue
-        for x in range(bmp.width):
-            gx = slot.bitmap_left + x
+        for x in range(col_min, col_max + 1):
+            gx = dx + x
             if not (0 <= gx < 16):
                 continue
-            byte = bmp.buffer[y * bmp.pitch + x // 8]
-            if (byte >> (7 - (x % 8))) & 1:
+            if bits[y][x]:
                 grid[gy][gx] = "#"
     return ["".join(row) for row in grid]
 
 
-def meiryo_grids(s):
-    """Per-char pixel grids rasterized from Meiryo at its native 16px size,
-    roughly aligned to our baseline row. Kana only, reference overlay only."""
-    return [{"ch": ch, "rows": _meiryo_grid(ch)} for ch in s]
+def kana_ref_grids(s):
+    """Per-char pixel grids rasterized from the kana skeleton reference font
+    at its configured size, aligned to our baseline row. Kana only,
+    reference overlay only."""
+    return [{"ch": ch, "rows": _kana_ref_grid(ch)} for ch in s]
 
 
 def kana_chars():
@@ -577,9 +610,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
                                               ensure_ascii=False))
-        if parsed.path == "/api/meiryo":
+        if parsed.path == "/api/kanaref":
             s = qs.get("s", [""])[0]
-            return self._send(200, json.dumps({"chars": meiryo_grids(s)},
+            return self._send(200, json.dumps({"chars": kana_ref_grids(s)},
                                               ensure_ascii=False))
         if parsed.path == "/api/kana":
             return self._send(200, json.dumps({"chars": kana_chars()},
@@ -704,7 +737,7 @@ def _ensure_venv():
     etc.) only live in .venv, and every one of those call sites imports them
     lazily and fails closed (try/except -> blank grid) rather than raising --
     so running under plain system `python3` doesn't error, it just silently
-    renders Regular Hangul (and kana, and the PC-98/Meiryo overlays) as
+    renders Regular Hangul (and kana, and the PC-98/kana-ref overlays) as
     nothing but blank cells. Re-exec here removes the whole "did you
     activate the venv" failure mode instead of relying on people remembering."""
     venv_dir = os.path.join(ROOT, ".venv")
