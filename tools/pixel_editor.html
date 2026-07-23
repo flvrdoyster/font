@@ -138,6 +138,7 @@
   .swatch:hover { border-color: var(--accent); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .swatch.saved { border-color: var(--confirm); }
+  .swatch.empty { border-style: dashed; opacity: 0.55; }
   .swatch.saved::after { content: ""; position: absolute; top: 2px; right: 2px;
     width: 6px; height: 6px; border-radius: 50%; background: var(--confirm); }
   .swatch canvas { image-rendering: pixelated; max-width: 24px; max-height: 24px;
@@ -221,8 +222,6 @@
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
       </div>
     </div>
-    <p class="hint" style="margin:-6px 0 8px">참조 오버레이 — 회색: Light 탭은 Regular 웨이트, Regular 탭은 반각 대응/원본 · 파랑: PC-98 골격(Light 한글만) · 보라: Noto Sans JP(Light 가나만, 베이스라인/비율 참조 전용 — 곡선은 챔퍼드 사각형으로 새로 그릴 것)</p>
-
     <div class="draw-split">
       <div class="draw-canvas">
         <div class="gridwrap">
@@ -283,7 +282,7 @@
 
   <!-- 3. 글자 불러오기 (팔레트) -->
   <section class="card tier">
-    <p class="label">글자 불러오기 <span class="hint-inline">초록 = 저장된 확정본, 나머지 = 미리보기 · 현재 웨이트 기준</span></p>
+    <p class="label">글자 불러오기</p>
     <div class="ptab-bar" role="tablist" aria-label="팔레트 분류">
       <button class="ptab" data-cat="latin" role="tab" aria-selected="true">영숫자</button>
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
@@ -307,7 +306,7 @@
     </div>
     <div class="palette-cat" data-cat="kana" hidden>
       <div class="palette-group">
-        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자) <span class="hint-inline">참조 오버레이 보라색 = Noto Sans JP — 베이스라인/비율만 참고, 곡선은 챔퍼드 사각형으로 새로 그립니다</span></p>
+        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자)</p>
         <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
       </div>
     </div>
@@ -726,19 +725,21 @@
     pal.innerHTML = "";
     for (const ch of chars) {
       const rows = paletteSource(ch);
-      if (!rows) continue;
       const saved = !!DATA[ch];
       const s = document.createElement("button");
-      s.className = "swatch" + (saved ? " saved" : "");
+      s.className = "swatch" + (saved ? " saved" : "") + (rows ? "" : " empty");
       s.dataset.ch = ch;
-      s.title = ch + (saved ? " (저장된 확정본)" : " (조합/원본 미리보기)");
+      s.title = ch + (saved ? " (저장된 확정본)" : rows ? " (조합/원본 미리보기)" : " (안 그려짐)");
       const cv = document.createElement("canvas");
-      const g = rowsToCells(rows), w = g[0].length;
+      const w = rows ? rows[0].length : (isHalfwidthKatakana(ch) ? 8 : 16);
       cv.width = w; cv.height = H;
-      const ctx = cv.getContext("2d");
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-      for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
-        if (g[y][x]) ctx.fillRect(x, y, 1, 1);
+      if (rows) {
+        const g = rowsToCells(rows);
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+        for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
+          if (g[y][x]) ctx.fillRect(x, y, 1, 1);
+      }
       s.appendChild(cv);
       s.addEventListener("click", () => loadChar(ch));
       pal.appendChild(s);
@@ -770,6 +771,10 @@
   }
 
   // ---- load / char ----
+  function isHalfwidthKatakana(ch) {
+    const c = ch.codePointAt(0);
+    return c >= 0xFF61 && c <= 0xFF9F;
+  }
   function loadChar(ch) {
     curChar = ch;
     charInput.value = ch;
@@ -778,6 +783,8 @@
       setWidth(rows[0].length, true);
       cells = rowsToCells(rows);
     } else {
+      if (isHalfwidthKatakana(ch)) setWidth(8, true);
+      else if (isKana(ch)) setWidth(16, true);
       cells = blank(W);
     }
     cpLabel.textContent = "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");

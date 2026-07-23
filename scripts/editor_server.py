@@ -476,6 +476,17 @@ KANA_REF_BASELINE_ROW = 12  # last row of the cap~baseline band (editor's
                              # is pinned here, not centered in the band.
 _KANA_REF = None            # lazy freetype Face
 
+# MS Gothic doesn't map 11 of the 251 kana_chars() (ゔゕゖ゙゚ゟヷヸヹヺヿ) --
+# get_char_index is 0 for those, which would otherwise render as that font's
+# .notdef box. Meiryo covers all 251, so it's a fallback for just those --
+# MS Gothic stays primary since it's what every already-drawn kana was
+# compared against. Read live from the user's own licensed Office install,
+# same as the earlier Meiryo-only overlay -- never copied into the repo,
+# reference-only, no redistribution.
+MEIRYO_TTC = "/Applications/Microsoft Word.app/Contents/Resources/DFonts/meiryo.ttc"
+MEIRYO_FACE_INDEX = 0
+_MEIRYO_REF = None
+
 
 def _is_kana(ch):
     return (0x3041 <= ord(ch) <= 0x30FF) or (0xFF61 <= ord(ch) <= 0xFF9F)
@@ -495,14 +506,44 @@ def _kana_ref():
     return _KANA_REF
 
 
+def _meiryo_ref():
+    global _MEIRYO_REF
+    if _MEIRYO_REF is None:
+        import freetype
+        face = freetype.Face(MEIRYO_TTC, MEIRYO_FACE_INDEX)
+        # No embedded bitmap strikes in Meiryo -- this scales the outline,
+        # but checked against 'あ' (h=11, top=10) it lands on the same
+        # proportions as MS Gothic's real strike at this size, so the same
+        # KANA_REF_PX/BASELINE_ROW apply without separate tuning.
+        face.set_pixel_sizes(0, KANA_REF_PX)
+        _MEIRYO_REF = face
+    return _MEIRYO_REF
+
+
+def _is_halfwidth_katakana(ch):
+    return 0xFF61 <= ord(ch) <= 0xFF9F
+
+
 def _kana_ref_grid(ch):
     if not _is_kana(ch):
         return None
-    try:
-        face = _kana_ref()
-    except Exception:
-        return None
     import freetype
+    face = None
+    try:
+        primary = _kana_ref()
+        if primary.get_char_index(ord(ch)) != 0:
+            face = primary
+    except Exception:
+        pass
+    if face is None:
+        try:
+            fallback = _meiryo_ref()
+            if fallback.get_char_index(ord(ch)) != 0:
+                face = fallback
+        except Exception:
+            pass
+    if face is None:
+        return None  # neither face maps this character
     try:
         face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_TARGET_MONO)
     except Exception:
@@ -519,13 +560,19 @@ def _kana_ref_grid(ch):
         return None  # blank glyph (e.g. space)
     row_min, row_max = min(ink_rows), max(ink_rows)
     col_min, col_max = min(ink_cols), max(ink_cols)
-    grid = [["."] * 16 for _ in range(16)]
+    # Halfwidth katakana get an 8px-wide grid (this project's 반각 convention,
+    # same as tools/glyphs_halfwidth.json) -- MS Gothic genuinely halves the
+    # advance/bitmap width for these codepoints (verified: 'ｱ' renders 6px
+    # vs 'ア' 12px at this size), so this isn't a naive rescale of the
+    # fullwidth glyph, it's that font's own halfwidth design.
+    grid_w = 8 if _is_halfwidth_katakana(ch) else 16
+    grid = [["."] * grid_w for _ in range(16)]
     # Crop to the *tight* ink bounding box (this font pads a blank trailing
     # row in its bitmap allocation) then center horizontally / pin the ink
     # bottom to our baseline row -- ignoring the font's own metrics
     # (left-side bearing, baseline) entirely, since this is a proportion/
     # size guide, not a typographically-correct overlay.
-    dx = (16 - (col_max - col_min + 1)) // 2 - col_min
+    dx = (grid_w - (col_max - col_min + 1)) // 2 - col_min
     dy = KANA_REF_BASELINE_ROW - row_max
     for y in range(row_min, row_max + 1):
         gy = dy + y
@@ -533,7 +580,7 @@ def _kana_ref_grid(ch):
             continue
         for x in range(col_min, col_max + 1):
             gx = dx + x
-            if not (0 <= gx < 16):
+            if not (0 <= gx < grid_w):
                 continue
             if bits[y][x]:
                 grid[gy][gx] = "#"
