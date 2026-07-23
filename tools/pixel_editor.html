@@ -195,6 +195,8 @@
     </div>
     <button class="btn primary" id="buildFont" hidden
       title="Regular와 Light 두 웨이트를 순서대로 컴파일합니다(현재 탭과 무관). 편집 중인 미저장 글자는 포함되지 않습니다. 빌드 로그는 브라우저 콘솔에 출력됩니다.">빌드</button>
+    <button class="btn" id="buildBmp" hidden
+      title="PC-98용 테스트 font.bmp를 다시 만듭니다 — 완성형 Light(compose_light.py)와 반각 한글(glyphs_halfwidth.json)을 최신 저장 내용으로 반영합니다. build/font_light.bmp에 씀. 편집 중인 미저장 글자는 포함되지 않습니다.">BMP 작성</button>
   </header>
 
   <div class="weight-tabs" role="tablist" aria-label="웨이트">
@@ -878,6 +880,7 @@
   const statusEl = document.getElementById("status");
   const serverRow = document.getElementById("serverRow");
   const buildBtn = document.getElementById("buildFont");
+  const bmpBtn = document.getElementById("buildBmp");
 
   function setStatus(on, text) {
     SERVER = on;
@@ -885,6 +888,7 @@
     statusEl.textContent = text;
     serverRow.hidden = !on;
     buildBtn.hidden = !on;
+    bmpBtn.hidden = !on;
   }
 
   async function fetchWeightData(weight) {
@@ -1016,6 +1020,23 @@
     }
     showToast(allOk ? "빌드 완료 ✓ (Regular + Light)" : "빌드 실패 — 콘솔 확인",
               allOk ? "success" : "error");
+    btn.disabled = false; btn.textContent = t;
+  });
+
+  document.getElementById("buildBmp").addEventListener("click", async e => {
+    const btn = e.currentTarget; const t = btn.textContent;
+    btn.disabled = true; btn.textContent = "BMP 작성 중…";
+    console.log("[BMP] 시작…");
+    try {
+      const res = await fetch("api/build_bmp", { method: "POST" });
+      const j = await res.json();
+      console.log(`[BMP] ${j.ok ? "완료 ✓" : "실패"}\n${j.log || ""}`);
+      showToast(j.ok ? "BMP 작성 완료 ✓ (build/font_light.bmp)" : "BMP 작성 실패 — 콘솔 확인",
+                j.ok ? "success" : "error");
+    } catch (err) {
+      console.error("[BMP] 요청 실패:", err);
+      showToast("BMP 작성 실패 — 콘솔 확인", "error");
+    }
     btn.disabled = false; btn.textContent = t;
   });
 

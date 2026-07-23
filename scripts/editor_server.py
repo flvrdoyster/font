@@ -39,6 +39,10 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              -> finalize). regular = full original-bitmap
                              font; light = thinned Latin/numbers + composed
                              KS X 1001 Hangul (scripts/compose_light.py).
+  POST /api/build_bmp     -> regenerate build/font_light.bmp (compose_light.py
+                             -> build_pc98_bmp.py) from current saved state --
+                             completed-form Light Hangul + glyphs_halfwidth.json.
+                             Unrelated to the TTF build above.
 
 Also serves tools/halfwidth_editor.html at /halfwidth -- a separate tool for
 hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
@@ -617,6 +621,9 @@ class Handler(BaseHTTPRequestHandler):
             weight = self._weight_qs(qs)
             ok, log = run_build(weight)
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "log": log}))
+        if parsed.path == "/api/build_bmp":
+            ok, log = run_build_bmp()
+            return self._send(200 if ok else 500, json.dumps({"ok": ok, "log": log}))
         if parsed.path == "/api/halfwidth_glyphs":
             try:
                 incoming = json.loads(raw)
@@ -671,7 +678,47 @@ def run_build(weight):
     return True, "\n".join(out)
 
 
+def run_build_bmp():
+    """Regenerate build/font_light.bmp from current saved state -- recompose
+    Light Hangul (build/light_hangul.json) then drop it + the saved 반각 한글
+    (glyphs_halfwidth.json) into a copy of the PC-98 font.bmp. Unsaved edits
+    in the editor aren't included (both scripts read from disk)."""
+    py = sys.executable
+    steps = [
+        [py, "scripts/compose_light.py"],
+        [py, "scripts/build_pc98_bmp.py"],
+    ]
+    out = []
+    for cmd in steps:
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        out.append(f"$ {' '.join(cmd[1:])}\n{(p.stdout or '')[-400:]}{(p.stderr or '')[-400:]}")
+        if p.returncode != 0:
+            return False, "\n".join(out)
+    return True, "\n".join(out)
+
+
+def _ensure_venv():
+    """Re-exec under this project's .venv if we're not already running there.
+
+    fontTools/PIL (via tools/pixelfont.py, the PC-98/kana/halfwidth lookups,
+    etc.) only live in .venv, and every one of those call sites imports them
+    lazily and fails closed (try/except -> blank grid) rather than raising --
+    so running under plain system `python3` doesn't error, it just silently
+    renders Regular Hangul (and kana, and the PC-98/Meiryo overlays) as
+    nothing but blank cells. Re-exec here removes the whole "did you
+    activate the venv" failure mode instead of relying on people remembering."""
+    venv_dir = os.path.join(ROOT, ".venv")
+    venv_py = os.path.join(venv_dir, "bin", "python3")
+    # Compare sys.prefix, not sys.executable/realpath: .venv/bin/python3 is
+    # usually just a symlink to the same base interpreter binary, so the
+    # executable path (even resolved) is identical either way -- sys.prefix
+    # is what actually flips to .venv once its site-packages are active.
+    if os.path.exists(venv_py) and os.path.realpath(sys.prefix) != os.path.realpath(venv_dir):
+        os.execv(venv_py, [venv_py] + sys.argv)
+
+
 def main():
+    _ensure_venv()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--no-open", action="store_true")
