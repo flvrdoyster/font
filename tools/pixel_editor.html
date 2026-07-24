@@ -194,14 +194,17 @@
          <span class="status" id="status" data-on="false">오프라인 · 복사 방식</span></p>
     </div>
     <button class="btn primary" id="buildFont" hidden
-      title="Regular와 Light 두 웨이트를 순서대로 컴파일합니다(현재 탭과 무관). 편집 중인 미저장 글자는 포함되지 않습니다. 빌드 로그는 브라우저 콘솔에 출력됩니다.">빌드</button>
+      title="한 패밀리의 Regular(1px)·Bold(2px) 두 멤버를 순서대로 컴파일합니다(현재 탭과 무관). 편집 중인 미저장 글자는 포함되지 않습니다. 빌드 로그는 브라우저 콘솔에 출력됩니다.">빌드</button>
     <button class="btn" id="buildBmp" hidden
       title="PC-98용 테스트 font.bmp를 다시 만듭니다 — 완성형 Light(compose_light.py)와 반각 한글(glyphs_halfwidth.json)을 최신 저장 내용으로 반영합니다. build/font_light.bmp에 씀. 편집 중인 미저장 글자는 포함되지 않습니다.">BMP 작성</button>
   </header>
 
+  <!-- data-weight keys ("regular"=2px, "light"=1px) describe stroke width and
+       are unchanged; the labels show what each compiles to in the single
+       RIBBI family: 1px stems -> Regular (default), 2px stems -> Bold. -->
   <div class="weight-tabs" role="tablist" aria-label="웨이트">
-    <button class="wtab" data-weight="regular" role="tab" aria-selected="true">Regular <span class="wtab-note">2px 줄기</span></button>
-    <button class="wtab" data-weight="light" role="tab" aria-selected="false">Light <span class="wtab-note">1px 줄기</span></button>
+    <button class="wtab" data-weight="light" role="tab" aria-selected="true">Regular <span class="wtab-note">1px 줄기 · 기본</span></button>
+    <button class="wtab" data-weight="regular" role="tab" aria-selected="false">Bold <span class="wtab-note">2px 줄기</span></button>
   </div>
 
   <!-- 1. 글자 그리기: 캔버스 · 1×/2×/3× 미리보기 · 내보내기 -->
@@ -323,7 +326,7 @@
   // normalize embedded fallback ({char:{w,rows}}) to {char:{rows}}
   for (const k in DATA) if (DATA[k].rows) DATA[k] = DATA[k];
   let SERVER = false;
-  let WEIGHT = "regular";   // "regular" | "light" -- selects glyphs_regular.json / glyphs_light.json
+  let WEIGHT = "light";   // "regular"=2px(Bold) | "light"=1px(Regular, default) -- selects glyphs_<weight>.json
   const H = 16;
   let W = 8;
   let cells = blank(W);
@@ -908,20 +911,23 @@
     const btn = e.currentTarget; const t = btn.textContent;
     btn.disabled = true;
     let allOk = true;
-    for (const weight of ["regular", "light"]) {
-      btn.textContent = `빌드 중… (${weight})`;
-      console.log(`[빌드:${weight}] 시작…`);
+    // internal weight key -> compiled family member it produces
+    const ROLE = { light: "Regular", regular: "Bold" };
+    for (const weight of ["light", "regular"]) {
+      const role = ROLE[weight];
+      btn.textContent = `빌드 중… (${role})`;
+      console.log(`[빌드:${role}] 시작…`);
       try {
         const res = await fetch("api/build?weight=" + weight, { method: "POST" });
         const j = await res.json();
-        console.log(`[빌드:${weight}] ${j.ok ? "완료 ✓" : "실패"}\n${j.log || ""}`);
+        console.log(`[빌드:${role}] ${j.ok ? "완료 ✓" : "실패"}\n${j.log || ""}`);
         if (!j.ok) allOk = false;
       } catch (err) {
-        console.error(`[빌드:${weight}] 요청 실패:`, err);
+        console.error(`[빌드:${role}] 요청 실패:`, err);
         allOk = false;
       }
     }
-    showToast(allOk ? "빌드 완료 ✓ (Regular + Light)" : "빌드 실패 — 콘솔 확인",
+    showToast(allOk ? "빌드 완료 ✓ (Regular + Bold)" : "빌드 실패 — 콘솔 확인",
               allOk ? "success" : "error");
     btn.disabled = false; btn.textContent = t;
   });

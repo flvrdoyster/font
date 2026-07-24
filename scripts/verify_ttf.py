@@ -9,7 +9,9 @@ from fontTools.ttLib import TTFont
 sys.path.insert(0, "tools")
 import pixelfont as pf
 
-BUILT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic.ttf"
+# Defaults to the Bold member: it's the 2px stems = the pixel-exact
+# vectorization of the original bitmap, which is what this test validates.
+BUILT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic-Bold.ttf"
 
 
 def render_mono(face, cp, width):

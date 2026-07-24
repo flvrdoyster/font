@@ -1,13 +1,14 @@
-"""Hand-drawn glyphs that override the bitmap-derived ones (Regular weight).
+"""Hand-drawn glyphs that override the bitmap-derived ones (2px stems, which
+compile to the family's Bold member -- see tools/metadata.py).
 
-Glyph pixels live in tools/glyphs_regular.json as { "A": [16 rows of '#'/'.'],
+Glyph pixels live in tools/glyphs_bold.json as { "A": [16 rows of '#'/'.'],
 ... }. Width is the length of a row (8 for half-width Latin, 16 for
 full-width). Designed to match the Dokkaebi Dinaru Hangul: 2px strokes, caps
 on rows 2-12.
 
-Light weight (1px stems) is a separate, parallel data file:
-tools/glyphs_light.json -- not loaded here; see scripts/thin_vertical.py and
-docs/ROADMAP.md.
+The 1px-stem weight (compiles to the family's default Regular member) is a
+separate, parallel data file: tools/glyphs_light.json -- not loaded here;
+see scripts/thin_vertical.py and docs/ROADMAP.md.
 
 Edit with tools/pixel_editor.html (served by scripts/editor_server.py, which
 writes to the file for whichever weight tab is active), or edit the JSON by
@@ -17,7 +18,7 @@ listed character.
 import json
 import os
 
-_JSON = os.path.join(os.path.dirname(__file__), "glyphs_regular.json")
+_JSON = os.path.join(os.path.dirname(__file__), "glyphs_bold.json")
 
 
 def load_src():

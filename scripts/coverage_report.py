@@ -7,7 +7,9 @@ the coverage-extension work (direction 2).
 import sys
 from fontTools.ttLib import TTFont
 
-FONT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic.ttf"
+# Bold member has the full 11,172-Hangul coverage; Regular (1px) covers the
+# 2,350 KS X 1001 set. Default to Bold for the widest cmap check.
+FONT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic-Bold.ttf"
 
 SETS = {
     "문장부호/대시": "—–…·‥•※",

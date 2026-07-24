@@ -1,9 +1,11 @@
 # 도깨비DNR 고딕 / Dokkaebi DNR Gothic
 
-**도깨비 디나루** 16×16 비트맵 글꼴을 Regular(2px 줄기)·Light(1px 줄기) 두 웨이트를
-가진 현대적 픽셀 스타일 서체로 다듬는 프로젝트다. Light 웨이트는 완성 후
-[gensei-pc98](../../gensei-pc98) PC-98 에뮬레이터 프로젝트의 실제 한글 폰트로
-삽입한다 — 원본 발굴·복원에서 그치지 않고 실사용 산출물을 목표로 한다.
+**도깨비 디나루** 16×16 비트맵 글꼴을 굵기 두 종(1px 줄기·2px 줄기)을 가진 현대적
+픽셀 스타일 서체로 다듬는 프로젝트다. 두 굵기는 **하나의 패밀리 Regular(1px, 기본)·
+Bold(2px)** 로 묶여 나오므로, 앱에서 볼드를 걸면(Cmd+B 등) 두꺼운 쪽으로 전환된다.
+얇은 쪽(Regular, 1px)은 완성 후 [gensei-pc98](../../gensei-pc98) PC-98 에뮬레이터
+프로젝트의 실제 한글 폰트로 삽입한다 — 원본 발굴·복원에서 그치지 않고 실사용
+산출물을 목표로 한다.
 
 이름에 `DNR`(디나루의 자음) 마커를 붙인 이유와 원본의 정체·계보는
 [docs/PROVENANCE.md](docs/PROVENANCE.md)에 정리했다.
@@ -11,7 +13,7 @@
 ## 개요
 
 - 원본: `도깨비 디나루`(파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
-- 목표 산출물: Regular/Light 두 웨이트 서체 + gensei-pc98용 한글 `font.bmp`
+- 목표 산출물: Regular(1px)·Bold(2px) 한 패밀리 서체 + gensei-pc98용 한글 `font.bmp`
 - 커버리지: 한글 완성형 11,172자 + 라틴·가나·키릴·그리스·기호 (한자 없음)
 - 라이선스: SIL Open Font License 1.1, 예약 글꼴 이름 `Dokkaebi DNR` — [OFL.txt](OFL.txt)
 - 변환 방식: 픽셀을 64×64 유닛 정사각형으로 보고 인접 픽셀의 공유 변을 상쇄해 병합
@@ -37,15 +39,26 @@ UFO → fontmake → 메타데이터/로컬라이즈 이름 부여 → 검증.
 
 ## 빌드
 
+한 패밀리의 두 멤버(1px=Regular, 2px=Bold)를 각각 빌드한다. `build_ufo.py`의
+`--weight light`가 1px→Regular, `--all`이 2px→Bold를 만든다(내부 weight 키
+`light`/`regular`는 줄기 두께를 뜻하며 그대로 유지 — 컴파일된 스타일 이름만
+Regular/Bold).
+
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-.venv/bin/python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic.ufo
-.venv/bin/fontmake -u build/DokkaebiDNRGothic.ufo -o ttf otf --output-dir build/
-.venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic.ttf build/DokkaebiDNRGothic.otf
+# Regular 멤버 (1px 줄기)
+.venv/bin/python scripts/build_ufo.py --weight light --proportional --out build/DokkaebiDNRGothic-Regular.ufo
+.venv/bin/fontmake -u build/DokkaebiDNRGothic-Regular.ufo -o ttf otf --output-dir build/
+.venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic-Regular.ttf build/DokkaebiDNRGothic-Regular.otf
 
-.venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic.ttf
-.venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic.ttf
+# Bold 멤버 (2px 줄기, 전체 11,172자)
+.venv/bin/python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic-Bold.ufo
+.venv/bin/fontmake -u build/DokkaebiDNRGothic-Bold.ufo -o ttf otf --output-dir build/
+.venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
+
+.venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic-Bold.ttf
+.venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic-Bold.ttf
 ```
 
 ## 픽셀 에디터
@@ -54,7 +67,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/editor_server.py       # http://localhost:8000
 ```
 
-브라우저에서 픽셀을 클릭·드래그해 편집한다. Regular/Light 웨이트는 상단 탭으로
-분리되어 있고, 저장하면 각 웨이트의 글리프 파일에 바로 기록된다. Regular는
-저장 후 버튼 한 번으로 TTF까지 재빌드할 수 있다. 서버 없이
-[tools/pixel_editor.html](tools/pixel_editor.html)만 열어도 복사 방식으로 쓸 수 있다.
+브라우저에서 픽셀을 클릭·드래그해 편집한다. 두 굵기(상단 탭: **Regular** 1px 줄기·
+기본 / **Bold** 2px 줄기)는 각각의 글리프 파일(`glyphs_light.json` = 1px,
+`glyphs_bold.json` = 2px)에 바로 기록된다. 빌드 버튼은 한 번에 두 멤버를
+컴파일한다. 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)만 열어도
+복사 방식으로 쓸 수 있다.

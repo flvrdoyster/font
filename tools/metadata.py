@@ -74,7 +74,12 @@ def apply(ufo, ascender, descender, cap_height, x_height, style="Regular"):
     # OS/2
     info.openTypeOS2VendorID = VENDOR_ID
     info.openTypeOS2Type = []              # fsType 0 = installable embedding
-    info.openTypeOS2WeightClass = 300 if style == "Light" else 400
+    # The two stroke weights ship as one RIBBI family: 1px stems -> "Regular"
+    # (the default member), 2px stems -> "Bold". styleMapStyleName (set above)
+    # already drives the fsSelection/head.macStyle bold bits via ufo2ft; this
+    # just sets the matching usWeightClass. (Light=300 kept for the legacy
+    # standalone-Light path, unused now.)
+    info.openTypeOS2WeightClass = {"Bold": 700, "Light": 300}.get(style, 400)
     info.openTypeOS2WidthClass = 5
 
     # Vertical metrics (baseline at bottom of the 16px cell; no descenders by

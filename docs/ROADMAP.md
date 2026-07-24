@@ -1,24 +1,38 @@
 # 도깨비DNR 고딕 — 로드맵
 
-**최종 목표**: 도깨비 디나루를 Regular(2px 줄기)·Light(1px 줄기) 두 웨이트의 현대적
-픽셀 서체로 재설계하고, 그 Light 한글을 [gensei-pc98](../../gensei-pc98) PC-98
+**최종 목표**: 도깨비 디나루를 한 패밀리 Regular(1px 줄기, 기본)·Bold(2px 줄기)로
+재설계하고, 그 Regular(1px) 한글을 [gensei-pc98](../../gensei-pc98) PC-98
 에뮬레이터의 실제 한글 폰트로 납품한다. 규모를 단계로 나눠, **완성형 2,350자로 먼저
 쓸 수 있는 폰트를 완성**(Phase 2, 완료)한 뒤 gensei-pc98에 납품(Phase 3, 완료)했고,
 마지막에 **전체 11,172자로 확장**한다(남은 작업, 아래 참고).
 
+문서 곳곳의 "Regular/Light"는 예전(별도 패밀리 시절) 표현이 남아있을 수 있음 —
+지금은 위 문단대로 **1px=Regular(기본), 2px=Bold**, 한 패밀리다. 헷갈리면
+"공통 설계" 섹션 참고.
+
 ## 공통 설계
 
-- 웨이트는 Regular(2px)/Light(1px) 2종. 둘 다 정적 폰트, 같은 각진 도깨비DNR 디자인의
-  굵기 차이. Light는 Regular의 세로 줄기를 1px로 얇힌 것.
-  - 라틴/숫자: Regular를 손으로 그리고 Light는 얇혀 파생(`tools/thin_vertical.py`).
-  - 한글: Regular는 원본 도깨비 디나루를 픽셀-정확 벡터화한 것(각진 2px, 이미 완성).
-    Light는 이를 1px로 얇힌 뒤 손으로 다듬어 확정.
-- 획 문법: Regular는 세로 줄기 2px·가로 바 1px·대각선 1px 계단. Light는 세로 줄기만
-  1px.
+- 굵기는 1px 줄기·2px 줄기 2종, 같은 각진 도깨비DNR 디자인의 굵기 차이. **하나의
+  RIBBI 패밀리("Dokkaebi DNR Gothic")로 컴파일**되어 1px가 기본(Regular) 멤버,
+  2px가 Bold 멤버다 — 예전엔 이 둘이 별도 패밀리("...Gothic" / "...Gothic Light")
+  였다가, 애초에 Light가 2px Regular를 얇힌 파생물이라 Cmd+B로 자연스럽게 이어지는
+  진짜 웨이트 관계였음을 뒤늦게 알아채고 하나로 합쳤다(가짜/합성 볼드 문제도 같이
+  해결됨). 내부 코드의 `weight` 키(`regular`=2px, `light`=1px)와 데이터 파일명
+  (`glyphs_bold.json`=2px, `glyphs_light.json`=1px)은 여전히 **줄기 두께**를
+  뜻하며 이 패밀리 병합과 무관하게 그대로 유지 — 바뀐 건 컴파일된 OpenType
+  스타일 이름/OS2 weightClass/fsSelection뿐(`tools/metadata.py`).
+  - 라틴/숫자: 2px(→Bold)를 손으로 그리고 1px(→Regular)는 얇혀 파생
+    (`tools/thin_vertical.py`).
+  - 한글: 2px(→Bold)는 원본 도깨비 디나루를 픽셀-정확 벡터화한 것(각진 2px, 이미
+    완성). 1px(→Regular)는 이를 얇힌 뒤 손으로 다듬어 확정.
+- 획 문법: 2px 줄기는 세로 줄기 2px·가로 바 1px·대각선 1px 계단. 1px 줄기는 세로
+  줄기만 1px.
 - 수직 밴드: 한글은 13행(상하 1px 여백), 라틴은 cap~baseline 11행에 x-height·어센더·
   디센더.
-- 에디터(`tools/pixel_editor.html`)는 Regular/Light를 상단 탭으로 분리, 저장 파일도
-  웨이트별 독립. 빌드(`scripts/build_ufo.py --weight regular|light`)는 두 웨이트 지원.
+- 에디터(`tools/pixel_editor.html`)는 두 굵기를 상단 탭(Regular=1px 기본 / Bold=2px)
+  으로 분리, 저장 파일도 굵기별 독립. 빌드(`scripts/build_ufo.py --weight
+  regular|light`)는 두 굵기 모두 지원 — `--weight light`가 Regular(1px) 멤버,
+  `--all`이 Bold(2px) 멤버를 만든다.
 
 ## Phase 1 — Regular 라틴/숫자 (완료)
 
@@ -29,7 +43,7 @@
 완성형 2,350자(KS X 1001) + 라틴/숫자를 커버하는 **쓸 수 있는 두 웨이트 폰트**.
 
 - [x] **Regular 한글**: 원본 도깨비 디나루 벡터화로 완성(11,172자 전부). `--all` 빌드.
-- [x] **Regular 라틴/숫자**: 반각/전각 손그림 124자(`glyphs_regular.json`) 완성.
+- [x] **Regular 라틴/숫자**: 반각/전각 손그림 124자(`glyphs_bold.json`) 완성.
 - [x] **Light 한글 2,350자**: 손확정(`glyphs_light.json`에 1,002자 + 나머지 조합, 2,350/2,350
       커버).
 - [x] **Light 라틴/숫자 반각·전각 124자**: 손확정 완료(`glyphs_light.json`, 124/124).
@@ -54,9 +68,21 @@
   나머지 전각 가나는 16px. Phase 3 납품 자체는 이것과 무관하게 이미 완료됐고
   (**미확정 가나는 PC-98 원본 데이터로 자동 폴백**, 아래 상세), 이 251자는 그 위에
   얹는 자체 디자인.
-  - **Regular 전파**: Light 확정본 251자를 그대로 `glyphs_regular.json`에 복사해둠
-    (현재는 Light와 동일한 1px 줄기 — 두께만 아직 Regular가 아님).
-  - **Regular 두껍힘(1px→2px) 방침**(미착수, 재개 시 이대로): `thin_vertical.py`의
+  - **Bold 전파**: Light(=Regular 멤버) 확정본 251자를 그대로 `glyphs_bold.json`에
+    복사해둠(현재는 Regular와 동일한 1px 줄기 — 두께만 아직 Bold(2px)가 아님).
+    **버그 발견·수정 완료**: `build()`(Bold/`--all` 경로)는 원래 `wanted =
+    strike.keys()`, 즉 **원본 HANKBC 비트맵에 실제로 있는 글리프에 대해서만**
+    `cg.GLYPHS`(=`glyphs_bold.json`) 오버라이드를 적용했다 — 원본 비트맵엔 가나
+    169자만 있어서(반각가타카나 등 나머지 82자는 없음) 251자 중 169자만 들어가고
+    82자는 조용히 빠지고 있었음. `build()` 끝에 원본 strike 밖 `cg.GLYPHS` 항목을
+    직접 추가하는 2차 패스를 넣어 해결(`build_light()`는 애초에 strike가 아니라
+    정해진 키 집합을 순회해서 이 문제가 없었음). 빌드 로그에 `+82 hand-drawn
+    glyphs with no original-strike counterpart` 로 확인, 컴파일 후 cmap에 가나
+    251/251 확인 완료. `verify_ttf.py`의 기존 881건 불일치는 이 수정과 무관(원본
+    cmap 범위 안에서만 비교하는 구조라 오늘 추가한 82자는 애초에 그 테스트
+    범위 밖 — 컨트롤 문자 제외 등 Phase 2 이전부터 있던 것, 문서 "검증 참고"
+    섹션 참고).
+  - **Bold 두껍힘(1px→2px) 방침**(미착수, 재개 시 이대로): `thin_vertical.py`의
     **국소 역연산**을 기본으로 한다. thin_vertical이 "세로 줄기"를 전역으로 판정한
     적이 없다는 게 핵심 — 픽셀별로 (단면폭 2px) + (세로 런 ≥2행)이면 오른쪽 열을
     지웠을 뿐이다. 그 역으로 (단면폭 1px) + (세로 런 ≥2행)인 픽셀의 **오른쪽에 1px
@@ -65,9 +91,11 @@
     기본이지만, 루프(お·あ의 원, ロ 등)의 **왼쪽 변**은 오른쪽에 붙이면 카운터(막힌
     속공간)를 파고든다 — 그래서 **오른쪽 추가가 카운터를 메우는 경우엔 왼쪽에 추가**
     (카운터는 테두리 flood-fill로 판별). 남는 루프/사선 전환부는 손으로 다듬는다.
-    ⚠️ 한글은 Regular가 원본이라 이 역연산이 "복원"에 가깝지만, **가나는 Light를
-    참조에서 처음 그린 거라 되돌릴 원본 Regular가 없다** — round-trip 검증이 안 되고
-    결과가 추측이라 손 다듬는 양이 한글보다 많을 것.
+    ⚠️ 한글은 원본 비트맵을 그대로 벡터화한 게 Bold(2px)라 이 역연산이 "복원"에
+    가깝지만, **가나는 Light(Regular)를 참조에서 처음 그린 거라 되돌릴 원본
+    Bold가 없다**(원본 HANKBC의 169자 가나는 있지만, 그건 우리가 새로 그린
+    Light 디자인과 별개의 원본 그대로임) — round-trip 검증이 안 되고 결과가
+    추측이라 손 다듬는 양이 한글보다 많을 것.
   - **PC-98 font.bmp에 가나 원본이 실제로 있음을 확인**(초반엔 없다고 잘못 판단했다가
     정정) — col4=히라가나(ku4), col5=가타카나(ku5), `row=32+ten`(표준 JIS X 0208
     ku4/ku5 순서, ten=1부터). `scripts/pc98_kana_map.py` → `tools/pc98_kana_map.json`

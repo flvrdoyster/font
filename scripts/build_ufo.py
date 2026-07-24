@@ -1,13 +1,19 @@
 """Build the 도깨비DNR 고딕 UFO from HANKBC bitmaps + custom glyph overrides.
 
-Usage:
-  python scripts/build_ufo.py [--subset "text..."]        # subset for quick checks
-  python scripts/build_ufo.py --all --proportional        # full Regular font
-  python scripts/build_ufo.py --weight light --proportional  # Light font
+The two stroke weights compile into one RIBBI family: 1px stems -> the
+Regular member (--weight light), 2px stems -> the Bold member (--all). The
+internal "light"/"regular" weight keys still describe stroke width; only the
+compiled OpenType style names are Regular/Bold.
 
-Writes build/DokkaebiDNRGothic(Light).ufo. Compile with fontmake separately.
+Usage:
+  python scripts/build_ufo.py [--subset "text..."]           # subset for quick checks
+  python scripts/build_ufo.py --all --proportional           # 2px stems -> Bold member
+  python scripts/build_ufo.py --weight light --proportional  # 1px stems -> Regular member
+
+Writes build/DokkaebiDNRGothic-{Regular,Bold}.ufo. Compile with fontmake separately.
 """
 import argparse
+import os
 import json
 import sys
 import unicodedata
@@ -68,8 +74,10 @@ def build(chars=None, all_glyphs=False, proportional=False):
 
     ufo = ufoLib2.Font()
     ufo.info.unitsPerEm = UPEM
+    # 2px stems compile as the family's Bold member (1px = Regular, see
+    # build_light); one RIBBI family so Cmd+B toggles between them.
     md.apply(ufo, ascender=ASCENDER, descender=DESCENDER,
-             cap_height=11 * pf.PX, x_height=7 * pf.PX)
+             cap_height=11 * pf.PX, x_height=7 * pf.PX, style="Bold")
 
     # decide glyph set
     if all_glyphs:
@@ -88,6 +96,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
 
     added = 0
     skipped_control = skipped_blank = 0
+    seen_cps = set()
     for gname in wanted:
         if gname in (".notdef", "space") or gname in ufo:
             continue
@@ -112,6 +121,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
         glyph.width = adv_px * pf.PX
         if cp is not None:
             glyph.unicodes = [cp]
+            seen_cps.add(cp)
         contours = pf.pixels_to_contours(width_px, rows)
         if shift_px:
             dx = shift_px * pf.PX
@@ -122,9 +132,41 @@ def build(chars=None, all_glyphs=False, proportional=False):
         if all_glyphs and added % 2000 == 0:
             print(f"  ...{added} glyphs", flush=True)
 
+    # cg.GLYPHS (glyphs_bold.json) can hold codepoints with no counterpart in
+    # the original HANKBC strike at all -- e.g. most of the kana palette
+    # beyond the 169 characters that bitmap happens to include. The loop
+    # above only visits strike-derived glyph names, so those would otherwise
+    # be silently dropped even though they're hand-drawn and ready. Add them
+    # directly, scoped to the same requested character set as the main pass.
+    wanted_cps = None if all_glyphs else {ord(ch) for ch in (chars or ())}
+    extra = 0
+    for cp, (width_px, rows) in cg.GLYPHS.items():
+        if cp in seen_cps:
+            continue
+        if wanted_cps is not None and cp not in wanted_cps:
+            continue
+        if proportional:
+            adv_px, shift_px = sp.proportional(width_px, rows, cp)
+        else:
+            adv_px, shift_px = (width_px if width_px else 8), 0
+        glyph = Glyph(name=f"uni{cp:04X}")
+        glyph.width = adv_px * pf.PX
+        glyph.unicodes = [cp]
+        contours = pf.pixels_to_contours(width_px, rows)
+        if shift_px:
+            dx = shift_px * pf.PX
+            contours = [[(x + dx, y) for x, y in c] for c in contours]
+        _draw(glyph, contours)
+        ufo.addGlyph(glyph)
+        added += 1
+        extra += 1
+
     if skipped_control or skipped_blank:
         print(f"  skipped {skipped_control} control-char/soft-hyphen codepoints, "
               f"{skipped_blank} blank-in-original codepoints (e.g. registered, Euro)")
+    if extra:
+        print(f"  +{extra} hand-drawn glyphs with no original-strike counterpart "
+              f"(e.g. kana beyond the original 169)")
     return ufo
 
 
@@ -137,8 +179,11 @@ def build_light(proportional=False):
     gensei-pc98 needs -- see docs/ROADMAP.md Phase 2, not all 11,172 Hangul)."""
     ufo = ufoLib2.Font()
     ufo.info.unitsPerEm = UPEM
+    # 1px stems compile as the family's default Regular member (2px = Bold,
+    # see build() above). The internal "light" weight key / glyphs_light.json
+    # still means "1px stems" -- only the compiled style name is "Regular".
     md.apply(ufo, ascender=ASCENDER, descender=DESCENDER,
-             cap_height=11 * pf.PX, x_height=7 * pf.PX, style="Light")
+             cap_height=11 * pf.PX, x_height=7 * pf.PX, style="Regular")
     _add_notdef(ufo)
     _add_space(ufo, {})
 
@@ -245,14 +290,15 @@ def main():
 
     if args.weight == "light":
         ufo = build_light(proportional=args.proportional)
-        out = args.out or "build/DokkaebiDNRGothicLight.ufo"
+        out = args.out or "build/DokkaebiDNRGothic-Regular.ufo"
     elif args.all:
         ufo = build(all_glyphs=True, proportional=args.proportional)
-        out = args.out or "build/DokkaebiDNRGothic.ufo"
+        out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
     else:
         text = args.subset or "안녕하세요세계 다람쥐헌쳇바퀴 Hello, World! 0123456789 @#&"
         ufo = build(chars=set(text), proportional=args.proportional)
-        out = args.out or "build/DokkaebiDNRGothic.ufo"
+        out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     ufo.save(out, overwrite=True)
     print(f"wrote {out} with {len(ufo)} glyphs")
 

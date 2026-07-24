@@ -80,6 +80,7 @@ def main():
                 c = line[x] if x < len(line) and x < 8 else "."
                 im.putpixel((x0 + x, y0 + y), 0 if c == "#" else 255)
 
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
     im.save(OUT)
     print(f"wrote {OUT}: {len(hangul) - missing}/{len(hangul)} 완성형 syllables placed"
           + (f", {missing} missing cell mapping" if missing else ""))

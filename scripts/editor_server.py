@@ -91,8 +91,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
 GLYPHS_FILES = {
-    "regular": os.path.join(ROOT, "tools", "glyphs_regular.json"),
-    "light": os.path.join(ROOT, "tools", "glyphs_light.json"),
+    "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
+    "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
 }
 
 PAGE_HEAD = (
@@ -725,15 +725,18 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "not found"}))
 
 
+# The two internal weight keys map to the two members of one RIBBI family:
+# "regular" = 2px stems -> compiled Bold; "light" = 1px stems -> compiled
+# Regular (the family default). See tools/metadata.py / build_ufo.py.
 BUILD_TARGETS = {
     "regular": {
-        "ufo": "build/DokkaebiDNRGothic.ufo",
-        "ttf": "build/DokkaebiDNRGothic.ttf",
+        "ufo": "build/DokkaebiDNRGothic-Bold.ufo",
+        "ttf": "build/DokkaebiDNRGothic-Bold.ttf",
         "build_args": ["--all"],
     },
     "light": {
-        "ufo": "build/DokkaebiDNRGothicLight.ufo",
-        "ttf": "build/DokkaebiDNRGothicLight.ttf",
+        "ufo": "build/DokkaebiDNRGothic-Regular.ufo",
+        "ttf": "build/DokkaebiDNRGothic-Regular.ttf",
         "build_args": ["--weight", "light"],
     },
 }
@@ -807,7 +810,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://localhost:{args.port}/"
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
-    print(f"  editing tools/glyphs_regular.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
+    print(f"  editing tools/glyphs_bold.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
     print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
     if not args.no_open:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
