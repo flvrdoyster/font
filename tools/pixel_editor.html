@@ -290,6 +290,7 @@
       <button class="ptab" data-cat="latin" role="tab" aria-selected="true">영숫자</button>
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
       <button class="ptab" data-cat="kana" role="tab" aria-selected="false">가나</button>
+      <button class="ptab" data-cat="symbols" role="tab" aria-selected="false">기호</button>
     </div>
     <div class="palette-cat" data-cat="latin">
       <div class="palette-group">
@@ -312,6 +313,9 @@
         <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자)</p>
         <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
       </div>
+    </div>
+    <div class="palette-cat" data-cat="symbols" hidden>
+      <div class="palette-scroll" id="paletteSymbolsWrap"></div>
     </div>
   </section>
 
@@ -342,6 +346,29 @@
     return ch;
   }
   const FULL_CHARS = Array.from(HALF_CHARS).map(toFullwidth).join("");
+  // 자주 쓰는 기호 -- ASCII 반각 문장부호/전각 대응 + scripts/coverage_report.py의
+  // 큐레이션 세트(SETS)와 동일한 8개 그룹. 폰트에 이미 있는(원본 벡터화 또는
+  // 손그림) 기호를 편집할 수 있게 하는 게 목적이라, 여기 없는 기호를 추가하고
+  // 싶으면 coverage_report.py의 SETS도 같이 갱신할 것.
+  const ASCII_PUNCT = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+  // ASCII printable (U+0021-007E) -> fullwidth form is a flat +0xFEE0 offset
+  // (the same rule toFullwidth hand-codes per range for letters/digits only).
+  function toFullwidthAny(ch) {
+    const c = ch.codePointAt(0);
+    return (c >= 0x21 && c <= 0x7E) ? String.fromCodePoint(c + 0xFEE0) : ch;
+  }
+  const SYMBOL_GROUPS = [
+    ["ascii-half", "ASCII 기호 (반각)", ASCII_PUNCT],
+    ["ascii-full", "전각 기호", Array.from(ASCII_PUNCT).map(toFullwidthAny).join("")],
+    ["dash", "문장부호 · 대시", "—–…·‥•※"],
+    ["quote", "따옴표", "“”‘’„‚«»‹›"],
+    ["currency", "통화기호", "€£¥¢₩₨₪₫฿₴₦"],
+    ["math", "수학 · 기호", "×÷±≠≤≥≈∞√∑∏∫°′″‰µΩ∆∇∂"],
+    ["arrow", "화살표", "←↑→↓↔↕⇐⇒⇔↖↗↘↙"],
+    ["bracket", "괄호 · 구분", "「」『』【】〈〉《》〔〕｛｝"],
+    ["shape", "도형 · 불릿", "■□▲△▼▽●○◆◇★☆♠♥♦♣"],
+    ["misc", "기타 유용", "™®©§¶†‡№℃℉✓✔"],
+  ];
   // KS X 1001 완성형 2,350자 전체 -- 서버의 /api/ks2350에서 채워짐 (정적 리터럴이 아님).
   let KS2350_CHARS = [];
   async function fetchKs2350() {
@@ -641,17 +668,39 @@
       pal.appendChild(s);
     }
   }
+  function ensureSymbolGroupsDom() {
+    const wrap = document.getElementById("paletteSymbolsWrap");
+    if (wrap.dataset.built) return;
+    wrap.dataset.built = "1";
+    for (const [key, label, chars] of SYMBOL_GROUPS) {
+      const group = document.createElement("div");
+      group.className = "palette-group";
+      const p = document.createElement("p");
+      p.className = "sublabel";
+      p.textContent = `${label} (${Array.from(chars).length}자)`;
+      const pal = document.createElement("div");
+      pal.className = "palette";
+      pal.id = `paletteSym-${key}`;
+      group.appendChild(p);
+      group.appendChild(pal);
+      wrap.appendChild(group);
+    }
+  }
   function buildPalette() {
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
     buildPaletteGroup("paletteAll2350", KS2350_CHARS);
     buildPaletteGroup("paletteKana", KANA_CHARS);
+    ensureSymbolGroupsDom();
+    for (const [key, , chars] of SYMBOL_GROUPS)
+      buildPaletteGroup(`paletteSym-${key}`, Array.from(chars));
   }
   async function loadPaletteData() {
     // Palette is the same character set for both weights; the swatch content
     // just follows the active weight (server fills unsaved glyphs per weight).
     paletteData = {};
-    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + KANA_CHARS.join("");
+    const symbolChars = SYMBOL_GROUPS.map(([, , chars]) => chars).join("");
+    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + KANA_CHARS.join("") + symbolChars;
     try {
       const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(chars),
                               { cache: "no-store" });
