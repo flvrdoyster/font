@@ -101,6 +101,7 @@
     border-bottom: 1px solid var(--grid-line); }
 
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
+  .ghost-sym { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
   .ghost-ref2 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
@@ -215,10 +216,7 @@
       <span class="cp" id="cpLabel">U+0041</span>
       <span style="flex:1"></span>
       <span class="label" style="margin:0">폭</span>
-      <div class="seg" role="group" aria-label="글자 폭">
-        <button id="w8" aria-pressed="true">8px</button>
-        <button id="w16" aria-pressed="false">16px</button>
-      </div>
+      <span class="cp" id="widthLabel">8px</span>
       <div class="seg" role="group" aria-label="안내선">
         <button id="guideBtn" aria-pressed="true">안내선</button>
         <button id="ghostBtn" aria-pressed="true">참조 오버레이</button>
@@ -232,6 +230,7 @@
           <div class="grid-outer">
             <div class="grid showgrid" id="grid"></div>
             <canvas class="ghost" id="ghost"></canvas>
+            <canvas class="ghost-sym" id="ghostSym"></canvas>
             <canvas class="ghost-ref2" id="ghostRef2"></canvas>
             <div class="guides" id="guides"></div>
           </div>
@@ -357,17 +356,22 @@
     const c = ch.codePointAt(0);
     return (c >= 0x21 && c <= 0x7E) ? String.fromCodePoint(c + 0xFEE0) : ch;
   }
+  // Tier 1 = WGL4 / Adobe Latin 수준의 사실상 표준, Tier 2 = 한국어 폰트 관례,
+  // Tier 3 = 도스/터미널 화면용 괘선·블록 (이 폰트는 PC-98 납품이라 사실상 필수).
   const SYMBOL_GROUPS = [
     ["ascii-half", "ASCII 기호 (반각)", ASCII_PUNCT],
     ["ascii-full", "전각 기호", Array.from(ASCII_PUNCT).map(toFullwidthAny).join("")],
-    ["dash", "문장부호 · 대시", "—–…·‥•※"],
+    ["latin1", "Latin-1 기호", "¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷"],
+    ["dash", "문장부호 · 대시", "–—―…·‥•※†‡‰′″⁄"],
     ["quote", "따옴표", "“”‘’„‚«»‹›"],
-    ["currency", "통화기호", "€£¥¢₩₨₪₫฿₴₦"],
-    ["math", "수학 · 기호", "×÷±≠≤≥≈∞√∑∏∫°′″‰µΩ∆∇∂"],
+    ["currency", "통화기호", "€₩￦£¥¢¤"],
+    ["math", "수학 · 기호", "−±×÷≠≤≥≈∞√∑∏∫∂∇∆◊°µΩ"],
     ["arrow", "화살표", "←↑→↓↔↕⇐⇒⇔↖↗↘↙"],
     ["bracket", "괄호 · 구분", "「」『』【】〈〉《》〔〕｛｝"],
-    ["shape", "도형 · 불릿", "■□▲△▼▽●○◆◇★☆♠♥♦♣"],
-    ["misc", "기타 유용", "™®©§¶†‡№℃℉✓✔"],
+    ["shape", "도형 · 불릿", "■□▲△▼▽●○◆◇★☆♠♥♦♣♪♬"],
+    ["box", "괘선", "─│┌┐└┘├┤┬┴┼━┃┏┓┗┛┣┫┳┻╋╱╲╳"],
+    ["block", "블록", "░▒▓█▀▄▌▐"],
+    ["misc", "기타 유용", "™№℮℃℉§¶✓✔"],
   ];
   // KS X 1001 완성형 2,350자 전체 -- 서버의 /api/ks2350에서 채워짐 (정적 리터럴이 아님).
   let KS2350_CHARS = [];
@@ -497,15 +501,24 @@
   }
 
   // ---- ghost overlays ----
-  // Two overlays, both gated by the 참조 오버레이 toggle:
+  // Three overlays, all gated by the 참조 오버레이 toggle:
   //  - grey (#ghost): Regular-tab kana only -- the confirmed Light glyph of the
   //    current char, to thicken 1px -> 2px against.
   //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
   //    CURRENT weight, so a similar already-drawn kana can be traced against.
+  //  - blue (#ghostSym, --guide): GNU Unifont, for symbols/punctuation only
+  //    (see /api/symref). Shape reference; still redrawn by hand.
   function isKana(ch) {
     const c = ch.codePointAt(0);
     return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
   }
+  function isHangul(ch) {
+    const c = ch.codePointAt(0);
+    return (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3130 && c <= 0x318F);
+  }
+  // Everything that isn't Hangul/kana gets the Unifont reference: Latin,
+  // digits, punctuation, currency, math, arrows, box drawing, blocks, shapes.
+  function isSymRef(ch) { return !isKana(ch) && !isHangul(ch); }
   let lightCache = {};
   async function fetchLight(ch) {
     try {
@@ -531,6 +544,17 @@
         if (rows[y][x] === "#")
           ctx.fillRect((dx + x) * px, y * px, px, px);
   }
+  let symCache = {};
+  async function fetchSym(ch) {
+    try {
+      const res = await fetch("api/symref?s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      symCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      symCache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();
+  }
   function drawGhost() {
     let rows = null;
     if (ghostOn && WEIGHT === "regular" && isKana(curChar)) {
@@ -538,7 +562,16 @@
       else fetchLight(curChar);   // redraws when it lands
     }
     paintGhost(document.getElementById("ghost"), rows, "--ink");
+    drawSymGhost();
     drawRefGhost();
+  }
+  function drawSymGhost() {
+    let rows = null;
+    if (ghostOn && isSymRef(curChar)) {
+      if (curChar in symCache) rows = symCache[curChar];
+      else fetchSym(curChar);
+    }
+    paintGhost(document.getElementById("ghostSym"), rows, "--guide");
   }
   let refChar = "";
   function drawRefGhost() {
@@ -654,7 +687,7 @@
       s.dataset.ch = ch;
       s.title = ch + (saved ? " (저장된 확정본)" : rows ? " (조합/원본 미리보기)" : " (안 그려짐)");
       const cv = document.createElement("canvas");
-      const w = rows ? rows[0].length : (isHalfwidthKatakana(ch) ? 8 : 16);
+      const w = canonicalWidth(ch);   // same fixed rule the canvas uses
       cv.width = w; cv.height = H;
       if (rows) {
         const g = rowsToCells(rows);
@@ -716,22 +749,29 @@
   }
 
   // ---- load / char ----
-  function isHalfwidthKatakana(ch) {
+  // Advance width is a FIXED property of the character, never of editor state.
+  // Derived from the existing data (all 2,900+ saved glyphs agree): 8px for
+  // ASCII and the halfwidth forms block, 16px for everything else -- Hangul,
+  // kana, CJK punctuation, fullwidth forms, and every symbol block including
+  // Latin-1 (±, ×, ÷ are fullwidth here, following KS X 1001).
+  function widthFor(ch) {
     const c = ch.codePointAt(0);
-    return c >= 0xFF61 && c <= 0xFF9F;
+    if (c >= 0x20 && c <= 0x7E) return 8;      // ASCII printable
+    if (c >= 0xFF61 && c <= 0xFFDC) return 8;  // halfwidth kana + jamo
+    return 16;
+  }
+  // A saved glyph's own width wins: it is the glyph that actually exists, and
+  // silently re-flowing it to a different width would corrupt real work.
+  function canonicalWidth(ch) {
+    const rows = paletteSource(ch);
+    return rows ? rows[0].length : widthFor(ch);
   }
   function loadChar(ch) {
     curChar = ch;
     charInput.value = ch;
+    setWidth(canonicalWidth(ch), true);   // always explicit -- never inherited
     const rows = paletteSource(ch);
-    if (rows) {
-      setWidth(rows[0].length, true);
-      cells = rowsToCells(rows);
-    } else {
-      if (isHalfwidthKatakana(ch)) setWidth(8, true);
-      else if (isKana(ch)) setWidth(16, true);
-      cells = blank(W);
-    }
+    cells = rows ? rowsToCells(rows) : blank(W);
     cpLabel.textContent = "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
     buildGrid();
     markPalette();
@@ -745,19 +785,19 @@
 
   // ---- width ----
   function setWidth(w, silent) {
-    if (w === W) return;
-    const old = cells;
-    W = w;
-    cells = blank(W);
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < Math.min(w, old[0].length); x++)
-        cells[y][x] = old[y][x] || false;
-    document.getElementById("w8").setAttribute("aria-pressed", W === 8);
-    document.getElementById("w16").setAttribute("aria-pressed", W === 16);
+    if (w !== W) {
+      const old = cells;
+      W = w;
+      cells = blank(W);
+      for (let y = 0; y < H; y++)
+        for (let x = 0; x < Math.min(w, old[0].length); x++)
+          cells[y][x] = old[y][x] || false;
+    }
+    // Always refresh the readout, even when the width didn't change -- it is
+    // a display of the current character's fixed width, not a control.
+    document.getElementById("widthLabel").textContent = W + "px";
     if (!silent) buildGrid();
   }
-  document.getElementById("w8").addEventListener("click", () => { setWidth(8); });
-  document.getElementById("w16").addEventListener("click", () => { setWidth(16); });
 
   // ---- guides toggle ----
   document.getElementById("guideBtn").addEventListener("click", e => {
@@ -786,13 +826,19 @@
       return;
     } else if (act === "pastegrid") {
       if (!gridClipboard) { showToast("복사된 칸이 없습니다", "error"); return; }
-      if (gridClipboard.w !== W) setWidth(gridClipboard.w, true);
-      cells = gridClipboard.rows.map(r => [...r]);
+      // Paste pixels, never the source glyph's width -- the target character's
+      // width is fixed. Crop if the copy was wider, left-align if narrower.
+      cells = blank(W);
+      const src = gridClipboard.rows, sw = gridClipboard.w;
+      for (let y = 0; y < H; y++)
+        for (let x = 0; x < Math.min(W, sw); x++)
+          cells[y][x] = src[y][x] || false;
+      if (sw !== W) showToast(`${sw}px → ${W}px로 맞춰 붙여넣음`, "info");
       buildGrid();
       return;
     } else if (act === "revert") {
+      setWidth(canonicalWidth(curChar), true);
       const rows = paletteSource(curChar);
-      if (rows && rows[0].length !== W) setWidth(rows[0].length, true);
       cells = rows ? rowsToCells(rows) : blank(W);
       buildGrid();
       showToast(`저장된 상태로 되돌림 · ${curChar}`, "success");
