@@ -51,6 +51,7 @@
      warning line in #cellMeta forced the whole card wide instead of wrapping. */
   .draw-card { flex: 0 0 380px; width: 380px; }
   .cellname { font-family: var(--mono); font-size: 13px; margin-bottom: 2px; }
+  .cellname .cp { font-size: 11px; color: var(--muted); font-weight: normal; margin-left: 6px; }
   .cellmeta { font-size: 11px; color: var(--muted); margin-bottom: 10px;
               overflow-wrap: break-word; }
   .grid-outer { position: relative; width: 352px; height: 352px; }
@@ -115,7 +116,10 @@
     </div>
 
     <div class="card draw-card">
-      <div class="cellname" id="cellName">셀을 고르세요</div>
+      <div class="cellname">
+        <span id="cellName">셀을 고르세요</span>
+        <span class="cp" id="cpLabel"></span>
+      </div>
       <div class="cellmeta" id="cellMeta">—</div>
       <div class="grid-outer">
         <div class="grid showgrid" id="grid"></div>
@@ -390,9 +394,14 @@
     }));
 
   // ---- select / load ----
+  function setCpLabel(ch) {
+    document.getElementById("cpLabel").textContent = ch
+      ? "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0") : "";
+  }
   async function selectCell(c) {
     cur = c;
     document.getElementById("cellName").textContent = c.id;
+    setCpLabel(null);
     document.getElementById("cellMeta").textContent =
       `${c.kind === "cv" ? "초중성" : "종성"} ${c.jamo} · 벌 ${c.beol} · ` +
       `잠긴 음절 ${c.blocked} · 샘플 ${c.samples}` +
@@ -427,8 +436,9 @@
   }
   async function loadChar(ch) {
     curChar = ch;
-    if (!ch) { cells = blank(); refRows = boldRows = null; buildGrid(); return; }
+    if (!ch) { cells = blank(); refRows = boldRows = null; setCpLabel(null); buildGrid(); return; }
     document.getElementById("cellName").textContent = `${cur.id}   ← ${ch}`;
+    setCpLabel(ch);
     // existing confirmed glyph for this syllable, if any
     const j = await (await fetch("api/glyphs?weight=light", {cache: "no-store"})).json();
     cells = j[ch] ? toCells(j[ch]) : blank();
