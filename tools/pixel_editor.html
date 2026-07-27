@@ -766,15 +766,30 @@
     const rows = paletteSource(ch);
     return rows ? rows[0].length : widthFor(ch);
   }
-  function loadChar(ch) {
+  async function loadChar(ch) {
     curChar = ch;
     charInput.value = ch;
     setWidth(canonicalWidth(ch), true);   // always explicit -- never inherited
-    const rows = paletteSource(ch);
+    let rows = paletteSource(ch);
     cells = rows ? rowsToCells(rows) : blank(W);
     cpLabel.textContent = "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
     buildGrid();
     markPalette();
+    if (rows || !SERVER) return;
+    // paletteSource only knows the precomputed sets (완성형 2,350, Latin, kana,
+    // symbols) -- anything else (조합형-only Hangul outside those 2,350, e.g.
+    // representative syllables for the component editor) falls through as
+    // blank even when the server actually has real data for it. Fetch this
+    // one character on demand rather than leaving the canvas empty.
+    try {
+      const j = await (await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(ch),
+                                   { cache: "no-store" })).json();
+      rows = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) { rows = null; }
+    if (ch !== curChar || !rows) return;   // stale response, or genuinely blank
+    if (rows[0].length !== W) setWidth(rows[0].length, true);
+    cells = rowsToCells(rows);
+    buildGrid();
   }
   charInput.addEventListener("input", () => {
     const v = charInput.value;
