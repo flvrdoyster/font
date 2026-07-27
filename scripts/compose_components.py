@@ -49,7 +49,11 @@ from collections import defaultdict, Counter
 import compose_light as cl
 
 ROOT = cl.ROOT
-CORPUS = os.path.join(ROOT, "build", "light_hangul.json")   # 2,350 confirmed
+# Read the hand-confirmed file directly rather than build/light_hangul.json.
+# Both hold the same 2,350 today, but representative syllables drawn to fill
+# empty cells land outside KS X 1001, which compose_light.py never emits --
+# reading the source of truth lets them feed straight back in.
+CORPUS = os.path.join(ROOT, "tools", "glyphs_light.json")
 FULL = [chr(c) for c in range(0xAC00, 0xD7A4)]              # all 11,172
 
 
@@ -99,17 +103,54 @@ def on(rows, cells):
     return frozenset((y, x) for (y, x) in cells if rows[y][x] == "#")
 
 
+def _ink(rows):
+    return frozenset((y, x) for y in range(16) for x in range(16) if rows[y][x] == "#")
+
+
 def observe(corpus, pc98, cho_ref):
-    """cell -> Counter of candidate pixel sets seen in the corpus."""
+    """cell -> Counter of candidate pixel sets seen in the corpus.
+
+    Two extraction paths. Syllables PC-98 also has get cut by its 받침 variance
+    zone, as before. Representative syllables drawn to fill an empty cell are
+    by definition outside KS X 1001, so PC-98 has no such glyph and no zone can
+    be derived -- those are split by subtraction instead: whichever of the two
+    cells is already known is removed, and the remainder is the other one.
+    Sound because the model composes by union, so subtraction is its inverse;
+    it just needs one side known, which holds for every cell that currently
+    needs drawing."""
     seen = defaultdict(Counter)
+    deferred = []
     for ch, rows in corpus.items():
-        if pc98(ch) is None:
-            continue
-        cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
         cv_c, *rest = cells_for(ch)
-        seen[cv_c][on(rows, cz) | on(rows, vz)] += 1   # everything above 받침
-        if rest:
-            seen[rest[0]][on(rows, jz)] += 1
+        if pc98(ch) is not None:
+            cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
+            seen[cv_c][on(rows, cz) | on(rows, vz)] += 1   # everything above 받침
+            if rest:
+                seen[rest[0]][on(rows, jz)] += 1
+        else:
+            deferred.append((ch, rows))
+
+    # Resolve by subtraction, repeating while anything still gets solved: a
+    # syllable filled this round can be the known side for the next one.
+    while deferred:
+        progressed = []
+        for ch, rows in deferred:
+            cv_c, *rest = cells_for(ch)
+            jong_c = rest[0] if rest else None
+            px = _ink(rows)
+            cv_known = seen.get(cv_c)
+            jong_known = seen.get(jong_c) if jong_c else None
+            if jong_c is None:
+                seen[cv_c][px] += 1                       # no 받침: all of it
+            elif jong_known:
+                seen[cv_c][px - jong_known.most_common(1)[0][0]] += 1
+            elif cv_known:
+                seen[jong_c][px - cv_known.most_common(1)[0][0]] += 1
+            else:
+                progressed.append((ch, rows))             # neither side known yet
+        if len(progressed) == len(deferred):
+            break                                          # nothing solvable left
+        deferred = progressed
     return seen
 
 
@@ -136,8 +177,11 @@ def compose(ch, lib):
 # ---- CLI --------------------------------------------------------------------
 
 def load_corpus():
+    """Confirmed Hangul syllables only -- the file also holds Latin/kana."""
     with open(CORPUS, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    return {ch: rows for ch, rows in data.items()
+            if len(ch) == 1 and 0xAC00 <= ord(ch) <= 0xD7A3}
 
 
 def _err(out, rows):

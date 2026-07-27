@@ -36,6 +36,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
   GET  /api/symref?s=..   -> same idea for symbols/punctuation, from GNU
                              Unifont (refs/unifont.otf, gitignored) -- native
                              16x16 pixel design, full BMP coverage.
+  GET  /api/cells         -> jamo-component cells for the 11,172 expansion
+                             (scripts/compose_components.py): status, sample
+                             counts, blocked-syllable counts, and a suggested
+                             representative syllable to draw. Backs the
+                             component editor at /components.
   POST /api/build?weight=regular|light
                           -> rebuild that weight's TTF (build_ufo -> fontmake
                              -> finalize). regular = full original-bitmap
@@ -93,6 +98,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
+COMPONENT_EDITOR = os.path.join(ROOT, "tools", "component_editor.html")
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
@@ -109,6 +115,12 @@ HALFWIDTH_PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<title>반각 한글 에디터</title></head><body>"
+)
+
+COMPONENT_PAGE_HEAD = (
+    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>부품 셀 에디터</title></head><body>"
 )
 
 
@@ -453,6 +465,96 @@ def ks2350_chars():
         return []
 
 
+# ---- component cells (11,172 expansion, see docs/ROADMAP.md) ---------------
+_CCOMP = False   # False = not loaded; None = load failed; else the module
+
+# Simple, evenly-built jamo make the cleanest sample for the slot that is free
+# to vary, so the extracted component isn't fighting an unusual partner. Order
+# is a preference list, first available wins.
+_SIMPLE_JONG = list("ㅁㅇㄴㄹㅂㄱ")
+_SIMPLE_CHO = list("ㅁㅇㄴㄹㅂㄱ")
+
+
+def _ccomp():
+    global _CCOMP
+    if _CCOMP is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "scripts"))
+            import compose_components
+            _CCOMP = compose_components
+        except Exception:
+            _CCOMP = None
+    return _CCOMP
+
+
+def _cell_id(cell):
+    """('jong','ㄽ',('ㅏ',)) <-> 'jong:ㄽ:ㅏ' -- JSON/URL friendly."""
+    kind, jamo, beol = cell
+    return f"{kind}:{jamo}:{''.join(str(b) for b in beol)}"
+
+
+def component_cells():
+    """Every cell the 11,172 needs, with its status and a suggested syllable
+    to draw. Status: filled (has corpus samples) / empty (draw this one)."""
+    cc = _ccomp()
+    if cc is None:
+        return []
+    cl = _composer()
+    corpus = cc.load_corpus()
+    seen = cc.observe(corpus, _pc98_grid_or_none(), *_cho_ref(corpus))
+    req = cc.required_cells()
+
+    # candidate syllables per cell, preferring a simple free jamo
+    cand = {}
+    for ch in cc.FULL:
+        for cell in cc.cells_for(ch):
+            cand.setdefault(cell, []).append(ch)
+
+    def pick(cell, chars):
+        kind = cell[0]
+        simple = _SIMPLE_JONG if kind == "cv" else _SIMPLE_CHO
+        def rank(ch):
+            cho, jung, jong = cl.decompose(ch)
+            free = jong if kind == "cv" else cho
+            try:
+                return simple.index(free)
+            except ValueError:
+                return len(simple)
+        return sorted(chars, key=rank)[0]
+
+    out = []
+    for cell in sorted(req, key=lambda c: (c[0], c[1], str(c[2]))):
+        chars = cand.get(cell, [])
+        cands = seen.get(cell)
+        n = sum(cands.values()) if cands else 0
+        variants = len(cands) if cands else 0
+        out.append({
+            "id": _cell_id(cell),
+            "kind": cell[0],
+            "jamo": cell[1],
+            "beol": "".join(str(b) for b in cell[2]),
+            "samples": n,
+            "variants": variants,
+            "blocked": len(chars),
+            "suggest": pick(cell, chars) if chars else None,
+            # confirmed syllables already using this cell -- overlay material
+            "examples": [ch for ch in chars if ch in corpus][:12],
+        })
+    return out
+
+
+def _cho_ref(corpus):
+    cl = _composer()
+    cho_ref, _ = cl.build_indices(corpus)
+    return (cho_ref,)
+
+
+def _pc98_grid_or_none():
+    """compose_light.load_pc98() equivalent, reusing our own bitmap handle."""
+    cl = _composer()
+    return cl.load_pc98()
+
+
 # Kana skeleton/proportion reference. Named by role (KANA_REF_*), not by the
 # specific font, since this has already been swapped repeatedly (Meiryo ->
 # PixelMplus12 -> Noto Sans JP -> Hiragino Kaku Gothic -> MS UI Gothic ->
@@ -744,6 +846,13 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/kana":
             return self._send(200, json.dumps({"chars": kana_chars()},
                                               ensure_ascii=False))
+        if parsed.path in ("/components", "/components.html", "/components/"):
+            with open(COMPONENT_EDITOR, encoding="utf-8") as f:
+                page = COMPONENT_PAGE_HEAD + f.read() + PAGE_TAIL
+            return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path == "/api/cells":
+            return self._send(200, json.dumps({"cells": component_cells()},
+                                              ensure_ascii=False))
         if parsed.path in ("/halfwidth", "/halfwidth.html", "/halfwidth/"):
             with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
                 page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
@@ -892,6 +1001,7 @@ def main():
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
     print(f"  editing tools/glyphs_bold.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
     print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
+    print(f"  부품 셀 에디터:  {url}components  ·  11,172자 확장용 (docs/ROADMAP.md)")
     if not args.no_open:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
