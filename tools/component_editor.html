@@ -66,12 +66,13 @@
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .toggle input { accent-color: var(--accent); }
-  .prev-card { flex: 1 1 280px; min-width: 260px; }
-  .prevgrid { display: grid; grid-template-columns: repeat(auto-fill, 40px);
-              gap: 6px; max-height: 560px; overflow-y: auto; }
+  .prev-card { flex: 1 1 320px; min-width: 300px; --pvpx: 48px; }
+  .prevgrid { display: grid; gap: 6px; max-height: 560px; overflow-y: auto;
+              grid-template-columns: repeat(auto-fill, calc(var(--pvpx) + 8px)); }
   .pv { border: 1px solid var(--faint); border-radius: 6px; padding: 3px;
         background: var(--cell-off); text-align: center; }
-  .pv canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+  .pv canvas { display: block; width: var(--pvpx); height: var(--pvpx);
+               image-rendering: pixelated; }
   .pv .lbl { font-size: 9px; color: var(--muted); margin-top: 1px; }
   .pv.confirmed { border-color: var(--confirm); }
   .pv.blocked { opacity: 0.35; }
@@ -146,7 +147,13 @@
     </div>
 
     <div class="card prev-card">
-      <div class="cellname">미리보기</div>
+      <div class="row2" style="margin: 0 0 2px; justify-content: space-between">
+        <span class="cellname">미리보기</span>
+        <span class="tabbar" style="margin: 0" role="group" aria-label="배율">
+          <button class="tab" data-scale="2" role="button" aria-selected="false">2×</button>
+          <button class="tab" data-scale="3" role="button" aria-selected="true">3×</button>
+        </span>
+      </div>
       <div class="cellmeta" id="prevMeta">이 부품을 쓰는 음절들</div>
       <div class="prevgrid" id="prevGrid"></div>
     </div>
@@ -219,6 +226,13 @@
   });
 
   // ---- preview: what this component does to the syllables built from it ----
+  document.querySelectorAll("[data-scale]").forEach(b =>
+    b.addEventListener("click", () => {
+      document.querySelectorAll("[data-scale]").forEach(x =>
+        x.setAttribute("aria-selected", x === b ? "true" : "false"));
+      document.querySelector(".prev-card").style.setProperty(
+        "--pvpx", (16 * +b.dataset.scale) + "px");
+    }));
   let prevTimer = null;
   function schedulePreview() {
     clearTimeout(prevTimer);
@@ -350,17 +364,23 @@
         `<td><span class="pill ${k}">${label}</span>` +
         (c.samples ? ` <span class="pill">샘플 ${c.samples}·변이 ${c.variants}</span>` : "") +
         `</td><td>${c.blocked}</td>` +
-        `<td class="jamo">${c.suggest || "—"}</td>`;
+        `<td class="jamo">${c.suggest || "—"}` +
+        (c.suggest && !c.resolvable
+          ? ` <span class="pill shaky" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>`
+          : "") +
+        `</td>`;
       tr.addEventListener("click", () => selectCell(c));
       rowsEl.appendChild(tr);
     }
     document.getElementById("status").textContent =
       `${shown.length}셀 · 그릴 것 ${CELLS.filter(c => c.samples === 0).length}`;
   }
-  document.querySelectorAll(".tab").forEach(b =>
+  // [data-filter], not .tab -- the preview's 2x/3x buttons share that class,
+  // and matching them here would set filter to undefined and blank the list.
+  document.querySelectorAll("[data-filter]").forEach(b =>
     b.addEventListener("click", () => {
       filter = b.dataset.filter;
-      document.querySelectorAll(".tab").forEach(x =>
+      document.querySelectorAll("[data-filter]").forEach(x =>
         x.setAttribute("aria-selected", x === b ? "true" : "false"));
       renderList();
     }));
@@ -372,7 +392,10 @@
     document.getElementById("cellMeta").textContent =
       `${c.kind === "cv" ? "초중성" : "종성"} ${c.jamo} · 벌 ${c.beol} · ` +
       `잠긴 음절 ${c.blocked} · 샘플 ${c.samples}` +
-      (c.variants > 1 ? ` · 변이 ${c.variants}` : "");
+      (c.variants > 1 ? ` · 변이 ${c.variants}` : "") +
+      (c.suggest && !c.resolvable
+        ? "  ⚠ 다른 셀이 아직 안 풀려서 이 글자만 그려선 안 풀립니다 — 그려두면 나중에 그 셀이 풀릴 때 자동으로 같이 풀립니다."
+        : "");
     renderList();
     renderSwatches(c);
     await loadChar(c.suggest);

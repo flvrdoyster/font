@@ -523,14 +523,25 @@ def component_cells():
     def pick(cell, chars):
         kind = cell[0]
         simple = _SIMPLE_JONG if kind == "cv" else _SIMPLE_CHO
+        def is_resolvable(ch):
+            other = [c for c in cc.cells_for(ch) if c != cell]
+            return bool(other) and other[0] in seen
         def rank(ch):
             cho, jung, jong = cl.decompose(ch)
             free = jong if kind == "cv" else cho
             try:
-                return simple.index(free)
+                fj_rank = simple.index(free)
             except ValueError:
-                return len(simple)
-        return sorted(chars, key=rank)[0]
+                fj_rank = len(simple)
+            # Extraction for a syllable outside PC-98 works by subtraction --
+            # one of its two cells must already be known so the ink can be
+            # split. A "simplest free jamo" pick with BOTH its cells empty
+            # can't resolve either one: drawing it changes nothing (this is
+            # what happened with 먝/몍 -- both landed on an unresolvable pair).
+            # Rank resolvable candidates first; simplicity only breaks ties.
+            return (0 if is_resolvable(ch) else 1, fj_rank)
+        best = sorted(chars, key=rank)[0]
+        return best, is_resolvable(best)
 
     out = []
     for cell in sorted(req, key=lambda c: (c[0], c[1], str(c[2]))):
@@ -538,6 +549,7 @@ def component_cells():
         cands = seen.get(cell)
         n = sum(cands.values()) if cands else 0
         variants = len(cands) if cands else 0
+        suggest, resolvable = pick(cell, chars) if chars else (None, False)
         out.append({
             "id": _cell_id(cell),
             "kind": cell[0],
@@ -546,7 +558,11 @@ def component_cells():
             "samples": n,
             "variants": variants,
             "blocked": len(chars),
-            "suggest": pick(cell, chars) if chars else None,
+            "suggest": suggest,
+            # False means no candidate's OTHER cell is known yet -- drawing
+            # `suggest` alone won't resolve this one; something else needs
+            # filling first (see pick()'s docstring-comment above).
+            "resolvable": resolvable,
             # confirmed syllables already using this cell -- overlay material
             "examples": [ch for ch in chars if ch in corpus][:12],
         })
