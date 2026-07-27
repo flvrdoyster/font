@@ -46,9 +46,13 @@
   .pill.empty { border-color: var(--warn); color: var(--warn); }
   .pill.shaky { border-color: var(--accent); color: var(--accent); }
   .pill.ok { border-color: var(--confirm); color: var(--confirm); }
-  .draw-card { flex: 0 0 auto; }
+  /* Fixed width, not flex:0 0 auto -- an auto-basis flex item sizes to its
+     widest unbroken content (min-width:auto default), so the long "순서 필요"
+     warning line in #cellMeta forced the whole card wide instead of wrapping. */
+  .draw-card { flex: 0 0 380px; width: 380px; }
   .cellname { font-family: var(--mono); font-size: 13px; margin-bottom: 2px; }
-  .cellmeta { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .cellmeta { font-size: 11px; color: var(--muted); margin-bottom: 10px;
+              overflow-wrap: break-word; }
   .grid-outer { position: relative; width: 352px; height: 352px; }
   .grid { position: absolute; inset: 0; display: grid;
           grid-template-columns: repeat(16, 22px); grid-auto-rows: 22px; }
