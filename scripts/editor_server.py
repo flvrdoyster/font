@@ -1056,6 +1056,13 @@ def _ensure_venv():
         os.execv(venv_py, [venv_py] + sys.argv)
 
 
+PAGES = [
+    ("메인 에디터", "/"),
+    ("반각 한글 에디터", "/halfwidth"),
+    ("부품 셀 에디터", "/components"),
+]
+
+
 def main():
     _ensure_venv()
     ap = argparse.ArgumentParser()
@@ -1069,10 +1076,33 @@ def main():
     print(f"  editing tools/glyphs_bold.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
     print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
     print(f"  부품 셀 에디터:  {url}components  ·  11,172자 확장용 (docs/ROADMAP.md)")
+
+    # Serve in the background so the terminal prompt below can run while the
+    # server is already up -- opening a browser before serve_forever() starts
+    # would just hit connection-refused.
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
     if not args.no_open:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        print("\n열 페이지를 골라주세요 (Enter만 누르면 안 엽니다):")
+        for i, (name, path) in enumerate(PAGES, 1):
+            print(f"  {i}) {name} ({path})")
+        try:
+            choice = input("> ").strip()
+        except EOFError:
+            choice = ""
+        if choice:
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(PAGES):
+                    webbrowser.open(url.rstrip("/") + PAGES[idx][1])
+                else:
+                    print("범위 밖 번호라 안 엽니다.")
+            except ValueError:
+                print("숫자가 아니라서 안 엽니다.")
+
     try:
-        server.serve_forever()
+        server_thread.join()
     except KeyboardInterrupt:
         print("\nstopped.")
 
