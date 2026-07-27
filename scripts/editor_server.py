@@ -570,18 +570,25 @@ def component_cells():
 
 
 def cell_preview(ch, rows, limit=24):
-    """Compose the syllables the drawn representative actually affects.
+    """The syllables the drawn representative actually affects.
 
     Drawing one syllable defines a component that ~27 others are built from,
     so the useful preview is not the syllable itself but what it does to them:
     a component that looks fine alone can still collide or leave holes once
-    another jamo sits next to it."""
+    another jamo sits next to it.
+
+    Confirmed syllables show their OWN saved pixels, not a recomposition --
+    when a cell's samples tie (majority-vote picks one arbitrarily), the
+    library component can come from a DIFFERENT confirmed syllable than the
+    one being previewed, so recomposing would silently show that other
+    syllable's shape instead of the real one (seen with 눰/뛈 sharing a tied
+    jong:ㅁ:(ㅝ,) cell -- 눰's compose() result was actually 뛈's glyph)."""
     cc = _ccomp()
     cl = _composer()
     if cc is None or cl is None:
         return []
     corpus = cc.load_corpus()
-    confirmed = set(corpus)
+    confirmed = dict(corpus)               # keep the pre-overwrite saved rows
     corpus[ch] = rows                      # the in-progress drawing
     seen = cc.observe(corpus, _pc98_grid_or_none(), *_cho_ref(corpus))
     lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
@@ -591,9 +598,13 @@ def cell_preview(ch, rows, limit=24):
     for other in cc.FULL:
         if not mine & set(cc.cells_for(other)):
             continue
-        out.append({"ch": other,
-                    "rows": cc.compose(other, lib),
-                    "confirmed": other in confirmed})
+        if other == ch:
+            out_rows = rows
+        elif other in confirmed:
+            out_rows = confirmed[other]
+        else:
+            out_rows = cc.compose(other, lib)
+        out.append({"ch": other, "rows": out_rows, "confirmed": other in confirmed})
         if len(out) >= limit:
             break
     return out
