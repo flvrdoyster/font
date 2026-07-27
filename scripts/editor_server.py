@@ -611,9 +611,11 @@ def cell_preview(ch, rows, limit=24):
 
 
 def _cho_ref(corpus):
-    cl = _composer()
-    cho_ref, _ = cl.build_indices(corpus)
-    return (cho_ref,)
+    # Must exclude syllables PC-98 lacks -- see compose_components
+    # .build_zone_indices for why a drawn representative winning the canonical
+    # slot crashes cho_zone.
+    cc = _ccomp()
+    return (cc.build_zone_indices(corpus, _pc98_grid_or_none()),)
 
 
 def _pc98_grid_or_none():

@@ -91,6 +91,20 @@ def required_cells(chars=FULL):
 
 # ---- extraction -------------------------------------------------------------
 
+def build_zone_indices(corpus, pc98):
+    """cho_ref for zones(), built ONLY from syllables PC-98 also has.
+
+    cho_zone picks a canonical syllable per (초성, 블록타입) and diffs it against
+    its PC-98 counterpart. Representative syllables drawn to fill empty cells
+    are outside KS X 1001, so PC-98 has no counterpart -- if one of them wins
+    the canonical slot, cho_zone dereferences a None grid and dies. Restricting
+    the index to the PC-98-covered subset keeps the canonical pick valid; the
+    drawn syllables still contribute components, just through observe()'s
+    subtraction path, which needs no zone."""
+    covered = {ch: rows for ch, rows in corpus.items() if pc98(ch) is not None}
+    return cl.build_indices(covered)[0]
+
+
 def zones(ch, pc98, cho_ref, refs):
     cho, jung, jong = cl.decompose(ch)
     jz = cl.jong_zone(ch, pc98) if jong else set()
@@ -199,7 +213,7 @@ def main():
 
     corpus = load_corpus()
     pc98 = cl.load_pc98()
-    cho_ref, _ = cl.build_indices(corpus)
+    cho_ref = build_zone_indices(corpus, pc98)
     seen = observe(corpus, pc98, cho_ref)
     lib = {cell: c.most_common(1)[0][0] for cell, c in seen.items()}
 
