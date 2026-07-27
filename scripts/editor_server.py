@@ -249,6 +249,16 @@ def text_grids(weight, s):
             grid = _pc98_kana_grid(ch)
         if grid is None:
             grid = _original_grid(ch, strike, cmap)
+            # The original strike is the 2px source. Handing it back unchanged
+            # for weight=light means a Light request answers with a Bold glyph
+            # -- which is what every syllable outside KS X 1001 hit, exactly
+            # the ones the component editor works on. Thin it so a Light
+            # request is always a 1px shape.
+            if grid is not None and weight == "light" and tv is not None:
+                try:
+                    grid = tv.thin_vertical(grid)
+                except Exception:
+                    pass
         out.append({"ch": ch, "rows": grid})
     return out
 
@@ -540,6 +550,36 @@ def component_cells():
             # confirmed syllables already using this cell -- overlay material
             "examples": [ch for ch in chars if ch in corpus][:12],
         })
+    return out
+
+
+def cell_preview(ch, rows, limit=24):
+    """Compose the syllables the drawn representative actually affects.
+
+    Drawing one syllable defines a component that ~27 others are built from,
+    so the useful preview is not the syllable itself but what it does to them:
+    a component that looks fine alone can still collide or leave holes once
+    another jamo sits next to it."""
+    cc = _ccomp()
+    cl = _composer()
+    if cc is None or cl is None:
+        return []
+    corpus = cc.load_corpus()
+    confirmed = set(corpus)
+    corpus[ch] = rows                      # the in-progress drawing
+    seen = cc.observe(corpus, _pc98_grid_or_none(), *_cho_ref(corpus))
+    lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
+
+    mine = set(cc.cells_for(ch))
+    out = []
+    for other in cc.FULL:
+        if not mine & set(cc.cells_for(other)):
+            continue
+        out.append({"ch": other,
+                    "rows": cc.compose(other, lib),
+                    "confirmed": other in confirmed})
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -893,6 +933,17 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/build_bmp":
             ok, log = run_build_bmp()
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "log": log}))
+        if parsed.path == "/api/cell_preview":
+            try:
+                body = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return self._send(400, json.dumps({"error": f"bad json: {e}"}))
+            ch = body.get("ch") or ""
+            rows = body.get("rows") or []
+            if not ch or not rows:
+                return self._send(400, json.dumps({"error": "ch and rows required"}))
+            return self._send(200, json.dumps({"chars": cell_preview(ch, rows)},
+                                              ensure_ascii=False))
         if parsed.path == "/api/halfwidth_glyphs":
             try:
                 incoming = json.loads(raw)

@@ -3,7 +3,7 @@
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
     --grid-line: #c9ced9; --confirm: #2e8b4f; --warn: #b3392c;
-    --ref: #2f6fe0; --ref2: #9333c9;
+    --ref: #2f6fe0; --ref2: #9333c9; --ref3: #0d8a76;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
@@ -12,7 +12,7 @@
       --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
       --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
       --grid-line: #383d47; --confirm: #4fbf78; --warn: #e0705f;
-      --ref: #6ea2ff; --ref2: #c68ce8;
+      --ref: #6ea2ff; --ref2: #c68ce8; --ref3: #4fd1b5;
     }
   }
   * { box-sizing: border-box; }
@@ -66,6 +66,15 @@
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .toggle input { accent-color: var(--accent); }
+  .prev-card { flex: 1 1 280px; min-width: 260px; }
+  .prevgrid { display: grid; grid-template-columns: repeat(auto-fill, 40px);
+              gap: 6px; max-height: 560px; overflow-y: auto; }
+  .pv { border: 1px solid var(--faint); border-radius: 6px; padding: 3px;
+        background: var(--cell-off); text-align: center; }
+  .pv canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+  .pv .lbl { font-size: 9px; color: var(--muted); margin-top: 1px; }
+  .pv.confirmed { border-color: var(--confirm); }
+  .pv.blocked { opacity: 0.35; }
   .swatches { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
   .sw { border: 1px solid var(--faint); border-radius: 5px; background: var(--cell-off);
         padding: 2px; cursor: pointer; }
@@ -107,10 +116,19 @@
         <div class="grid showgrid" id="grid"></div>
         <canvas class="ghost" id="ghostRef" width="352" height="352"></canvas>
         <canvas class="ghost" id="ghostBold" width="352" height="352"></canvas>
+        <canvas class="ghost" id="ghostChar" width="352" height="352"></canvas>
       </div>
       <div class="row2">
         <label class="toggle"><input type="checkbox" id="tRef" checked> 확정 음절(보라)</label>
         <label class="toggle"><input type="checkbox" id="tBold" checked> 원본 뼈대(파랑)</label>
+      </div>
+      <div class="row2">
+        <label class="toggle" for="refChar">참고(초록)</label>
+        <input id="refChar" maxlength="2" autocomplete="off"
+               style="font: inherit; font-size: 14px; width: 46px; text-align: center;
+                      border: 1px solid var(--grid-line); border-radius: 6px;
+                      background: var(--ground); color: var(--ink); padding: 4px;">
+        <span id="refState" style="font-size: 11px; color: var(--muted)"></span>
       </div>
       <div class="swatches" id="swatches"></div>
       <div class="row2">
@@ -125,6 +143,12 @@
         <button class="btn primary" id="save">저장</button>
         <span class="sub" id="status" style="margin:0"></span>
       </div>
+    </div>
+
+    <div class="card prev-card">
+      <div class="cellname">미리보기</div>
+      <div class="cellmeta" id="prevMeta">이 부품을 쓰는 음절들</div>
+      <div class="prevgrid" id="prevGrid"></div>
     </div>
   </div>
 </div>
@@ -142,7 +166,7 @@
   let curChar = null;      // representative syllable being drawn
   let cells = blank();
   let refOn = true, boldOn = true;
-  let refRows = null, boldRows = null;
+  let refRows = null, boldRows = null, charRows = null;
 
   function blank() { return Array.from({length: H}, () => Array(W).fill(false)); }
   function toCells(rows) {
@@ -190,7 +214,52 @@
     const x = +t.dataset.x, y = +t.dataset.y;
     cells[y][x] = val; t.classList.toggle("on", val);
   });
-  window.addEventListener("pointerup", () => { painting = false; });
+  window.addEventListener("pointerup", () => {
+    if (painting) { painting = false; schedulePreview(); }
+  });
+
+  // ---- preview: what this component does to the syllables built from it ----
+  let prevTimer = null;
+  function schedulePreview() {
+    clearTimeout(prevTimer);
+    prevTimer = setTimeout(renderPreview, 350);   // recompose costs ~0.45s
+  }
+  async function renderPreview() {
+    const el = document.getElementById("prevGrid");
+    const meta = document.getElementById("prevMeta");
+    if (!curChar) { el.innerHTML = ""; meta.textContent = "셀을 고르세요"; return; }
+    meta.textContent = "계산 중…";
+    let out;
+    try {
+      const res = await fetch("api/cell_preview", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ch: curChar, rows: toRows()}),
+      });
+      out = (await res.json()).chars || [];
+    } catch (err) { meta.textContent = "미리보기 실패"; return; }
+    el.innerHTML = "";
+    let composed = 0;
+    for (const c of out) {
+      const d = document.createElement("div");
+      d.className = "pv" + (c.confirmed ? " confirmed" : "") + (c.rows ? "" : " blocked");
+      d.title = c.rows ? (c.confirmed ? `${c.ch} (확정본)` : `${c.ch} (조합)`)
+                       : `${c.ch} — 다른 셀이 아직 비어 조합 불가`;
+      const cv = document.createElement("canvas");
+      cv.width = 16; cv.height = 16;
+      if (c.rows) {
+        composed++;
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+        for (let y = 0; y < 16; y++)
+          for (let x = 0; x < c.rows[y].length; x++)
+            if (c.rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
+      }
+      const lbl = document.createElement("div");
+      lbl.className = "lbl"; lbl.textContent = c.ch;
+      d.appendChild(cv); d.appendChild(lbl); el.appendChild(d);
+    }
+    meta.textContent = `이 부품을 쓰는 음절 ${out.length}개 · 조합됨 ${composed}`;
+  }
 
   function paintGhost(cv, rows, color) {
     const ctx = cv.getContext("2d");
@@ -205,12 +274,36 @@
   function drawGhosts() {
     paintGhost(document.getElementById("ghostRef"), refOn ? refRows : null, "--ref2");
     paintGhost(document.getElementById("ghostBold"), boldOn ? boldRows : null, "--ref");
+    paintGhost(document.getElementById("ghostChar"), charRows, "--ref3");
   }
   document.getElementById("tRef").addEventListener("change", e => {
     refOn = e.target.checked; drawGhosts();
   });
   document.getElementById("tBold").addEventListener("change", e => {
     boldOn = e.target.checked; drawGhosts();
+  });
+
+  // 참고: a syllable typed here shows in green, for tracing a similar shape
+  // that is already drawn. CONFIRMED glyphs only -- /api/text would happily
+  // answer with the original strike auto-thinned for anything outside the
+  // 2,350, and tracing that would mean copying an unreviewed guess while it
+  // looks exactly like real work. Read the confirmed file instead and show
+  // nothing when the character isn't in it.
+  const refState = document.getElementById("refState");
+  document.getElementById("refChar").addEventListener("input", async e => {
+    const ch = Array.from(e.target.value)[0] || "";
+    e.target.value = ch;
+    charRows = null;
+    if (!ch) { refState.textContent = ""; drawGhosts(); return; }
+    try {
+      const all = await (await fetch("api/glyphs?weight=light",
+                                     {cache: "no-store"})).json();
+      charRows = all[ch] || null;
+    } catch (err) { charRows = null; }
+    refState.textContent = charRows ? "확정본" : "확정본 없음";
+    refState.style.color = charRows
+      ? "var(--confirm)" : "var(--muted)";
+    drawGhosts();
   });
 
   // ---- tools ----
@@ -231,7 +324,7 @@
       else if (a === "left") cells = shift(-1, 0);
       else if (a === "right") cells = shift(1, 0);
       else if (a === "revert") { loadChar(curChar); return; }
-      paintAll();
+      paintAll(); schedulePreview();
     }));
 
   // ---- list ----
@@ -320,10 +413,14 @@
                                    {cache: "no-store"})).json();
       refRows = r.chars && r.chars[0] && r.chars[0].rows;
     }
+    // Bold on purpose, unthinned: it shows the original skeleton as drawn, and
+    // deciding which stroke survives the 1px reduction is a visual call to make
+    // against it, not something to pre-apply.
     const b = await (await fetch("api/text?weight=regular&s=" + encodeURIComponent(ch),
                                  {cache: "no-store"})).json();
     boldRows = b.chars && b.chars[0] && b.chars[0].rows;
     buildGrid();
+    renderPreview();
   }
 
   document.getElementById("save").addEventListener("click", async e => {
