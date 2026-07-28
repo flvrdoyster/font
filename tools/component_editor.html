@@ -103,6 +103,9 @@
 
   <div class="layout">
     <div class="card list-card">
+      <div class="row2" style="margin: 0 0 8px">
+        <label class="toggle"><input type="checkbox" id="fTodo"> 그릴 셀만</label>
+      </div>
       <div class="rows">
         <table>
           <thead><tr><th>셀</th><th>벌</th><th>상태</th><th>영향</th><th>제안</th></tr></thead>
@@ -170,6 +173,7 @@
   const toastsEl = document.getElementById("toasts");
 
   let CELLS = [];
+  let todoOnly = false;    // 그릴 셀만 보기
   let cur = null;          // selected cell record
   let curChar = null;      // representative syllable being drawn
   let cells = blank();
@@ -361,11 +365,18 @@
     // errors. Nothing actionable was left, so the tier is gone.
     return c.samples === 0 ? ["empty", "그릴 것"] : ["ok", "확정"];
   }
+  // 가나다순: 초중성 먼저, 그 안에서 자모순. Plain codepoint order on the
+  // compatibility-jamo block already IS the standard order -- 초성/중성 never
+  // include clusters, and for 종성 the block interleaves them exactly where
+  // 가나다 wants them (ㄱㄲㄳㄴㄵㄶㄷㄹㄺ...). No collation table needed.
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   function renderList() {
-    // most syllables fixed per cell first -- the review order
-    const shown = CELLS.slice().sort((a, b) => b.affects - a.affects);
+    const shown = CELLS.filter(c => !todoOnly || c.samples === 0)
+                       .sort((a, b) => cmp(a.kind, b.kind)
+                                    || cmp(a.jamo, b.jamo)
+                                    || cmp(a.beol, b.beol));
     rowsEl.innerHTML = "";
-    for (const c of shown) {          // 1,145 rows, no cap -- the list is the review queue
+    for (const c of shown) {          // no cap -- the list is the review queue
       const [k, label] = status(c);
       const tr = document.createElement("tr");
       tr.className = "row"; tr.dataset.id = c.id;
@@ -386,8 +397,12 @@
     }
     const todo = CELLS.filter(c => c.samples === 0).length;
     document.getElementById("status").textContent =
-      `${shown.length}셀` + (todo ? ` · 그릴 것 ${todo}` : "");
+      `${shown.length}셀` + (todoOnly || !todo ? "" : ` · 그릴 것 ${todo}`);
   }
+  document.getElementById("fTodo").addEventListener("change", e => {
+    todoOnly = e.target.checked;
+    renderList();
+  });
 
   // ---- select / load ----
   function setCpLabel(ch) {
