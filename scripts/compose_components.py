@@ -13,16 +13,24 @@ Why 벌식, measured (see ROADMAP for the full table):
   bitmap-font answer is 벌식: each jamo gets several variants (벌) selected by
   context, which absorbs that interaction.
 
-The cells (leave-one-out 85.5% exact / 0.91px mean once every cell is filled):
+The cells (leave-one-out 79.4% exact / 1.48px mean at full coverage):
 
-  초중성 = (초성, 중성, 받침유무)   19 x 21 x 2 = 798 cells
-  종성   = (종성, 중성)             27 x 21     = 567 cells
+  초중성 = (초성, 중성, 받침유무)                 19 x 21 x 2 = 798 cells
+  종성   = (종성, 중성), but 겹받침 11종은 (종성)만 = 16 x 21 + 11 = 347 cells
 
 초성 and 중성 are ONE cell, not two. Splitting them was measured to be
 unfounded: a 초성벌 keyed on (중성,받침유무) and a 중성벌 keyed on (받침유무,초성)
 are both determined by (초성,중성,받침유무), so the two always appear together
-and no corpus evidence can separate them. Merging scored identically (85.5%,
-0.91px, <=2px 90.7%) with 798 fewer cells to draw and review.
+and no corpus evidence can separate them.
+
+겹받침(두 자음이 겹친 11종: ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ)도 중성별로 나누지 않는다: 확정된
+152개 표본으로 leave-one-out한 결과 중성별 21벌 유지 92.5%(n=106, 표본 1개뿐인 셀이
+많아 사실상 편향된 부분표본) vs 가로/세로 2벌 80.7%(n=150) vs 아예 하나로 합침
+78.9%(n=152, 전체) -- 2벌과 통합 사이 차이가 1.8pt뿐이라 세분화가 거의 이득이 없다.
+겹받침은 이미 받침 자리를 거의 다 채우는 두꺼운 모양이라 중성이 어디 있든 잘 안
+바뀐다는 뜻. 이 11종은 (종성) 하나로만 키를 잡아 최대 231칸을 11칸으로 줄인다. ㅆ도
+같은 실험에서 통합이 82.8%로 21벌과 동률이었지만, 사용자 판단으로 일단 겹받침
+11종에만 적용하고 ㅆ은 기존 21벌을 유지한다.
 
 초중성 is cut out of the confirmed corpus as the ink outside compose_light's
 PC-98 받침 variance zone; 종성 is the ink inside it. That cut is unstable (the
@@ -69,8 +77,16 @@ def cv_beol(jong):
     return (bool(jong),)
 
 
-def jong_beol(jung):
-    """받침 width/position follows the vowel above it."""
+def jong_beol(jong, jung):
+    """받침 width/position follows the vowel above it -- except 겹받침 (two
+    stacked consonants), measured to barely reshape with the vowel at all:
+    leave-one-out on the 152 confirmed 겹받침 samples gave 78.9% exact/1.88px
+    collapsed to one shape vs 80.7%/1.62px even at a coarse 2-way (가로/세로)
+    split, i.e. the split bought almost nothing. They're wide enough to fill
+    the batchim row regardless of where the vowel sits, so they collapse to
+    one shape per jamo, no jung distinction -- 11 cells instead of up to 231."""
+    if jong in cl.CLUSTER_JONG:
+        return ()
     return (jung,)
 
 
@@ -79,7 +95,7 @@ def cells_for(ch):
     cho, jung, jong = cl.decompose(ch)
     out = [("cv", cho + jung, cv_beol(jong))]
     if jong:
-        out.append(("jong", jong, jong_beol(jung)))
+        out.append(("jong", jong, jong_beol(jong, jung)))
     return out
 
 

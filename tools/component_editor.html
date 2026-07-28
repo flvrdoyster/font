@@ -123,16 +123,14 @@
       <div class="cellmeta" id="cellMeta">—</div>
       <div class="grid-outer">
         <div class="grid showgrid" id="grid"></div>
-        <canvas class="ghost" id="ghostRef" width="352" height="352"></canvas>
         <canvas class="ghost" id="ghostBold" width="352" height="352"></canvas>
         <canvas class="ghost" id="ghostChar" width="352" height="352"></canvas>
       </div>
       <div class="row2">
-        <label class="toggle"><input type="checkbox" id="tRef" checked> 확정 음절(보라)</label>
         <label class="toggle"><input type="checkbox" id="tBold" checked> 원본 뼈대(파랑)</label>
       </div>
       <div class="row2">
-        <label class="toggle" for="refChar">참고(초록)</label>
+        <label class="toggle"><input type="checkbox" id="tChar" checked> 참고(초록)</label>
         <input id="refChar" maxlength="2" autocomplete="off"
                style="font: inherit; font-size: 14px; width: 46px; text-align: center;
                       border: 1px solid var(--grid-line); border-radius: 6px;
@@ -180,8 +178,8 @@
   let cur = null;          // selected cell record
   let curChar = null;      // representative syllable being drawn
   let cells = blank();
-  let refOn = true, boldOn = true;
-  let refRows = null, boldRows = null, charRows = null;
+  let boldOn = true, charOn = true;
+  let boldRows = null, charRows = null;
 
   function blank() { return Array.from({length: H}, () => Array(W).fill(false)); }
   function toCells(rows) {
@@ -294,15 +292,14 @@
     ctx.globalAlpha = 1;
   }
   function drawGhosts() {
-    paintGhost(document.getElementById("ghostRef"), refOn ? refRows : null, "--ref2");
     paintGhost(document.getElementById("ghostBold"), boldOn ? boldRows : null, "--ref");
-    paintGhost(document.getElementById("ghostChar"), charRows, "--ref3");
+    paintGhost(document.getElementById("ghostChar"), charOn ? charRows : null, "--ref3");
   }
-  document.getElementById("tRef").addEventListener("change", e => {
-    refOn = e.target.checked; drawGhosts();
-  });
   document.getElementById("tBold").addEventListener("change", e => {
     boldOn = e.target.checked; drawGhosts();
+  });
+  document.getElementById("tChar").addEventListener("change", e => {
+    charOn = e.target.checked; drawGhosts();
   });
 
   // 참고: a syllable typed here shows in green, for tracing a similar shape
@@ -434,26 +431,17 @@
           ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
           for (let y = 0; y < H; y++) for (let x = 0; x < rows[y].length; x++)
             if (rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
-          b.addEventListener("click", () => { refRows = rows; drawGhosts(); });
         });
     }
   }
   async function loadChar(ch) {
     curChar = ch;
-    if (!ch) { cells = blank(); refRows = boldRows = null; setCpLabel(null); buildGrid(); return; }
+    if (!ch) { cells = blank(); boldRows = null; setCpLabel(null); buildGrid(); return; }
     document.getElementById("cellName").textContent = `${cur.id}   ← ${ch}`;
     setCpLabel(ch);
     // existing confirmed glyph for this syllable, if any
     const j = await (await fetch("api/glyphs?weight=light", {cache: "no-store"})).json();
     cells = j[ch] ? toCells(j[ch]) : blank();
-    // overlays: a confirmed sibling using this cell, and the Bold skeleton
-    const ex = (cur.examples || [])[0];
-    refRows = null;
-    if (ex) {
-      const r = await (await fetch("api/text?weight=light&s=" + encodeURIComponent(ex),
-                                   {cache: "no-store"})).json();
-      refRows = r.chars && r.chars[0] && r.chars[0].rows;
-    }
     // Bold on purpose, unthinned: it shows the original skeleton as drawn, and
     // deciding which stroke survives the 1px reduction is a visual call to make
     // against it, not something to pre-apply.
