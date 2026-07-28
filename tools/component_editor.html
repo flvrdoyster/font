@@ -351,8 +351,12 @@
 
   // ---- list ----
   function status(c) {
+    // A single sample has nothing to disagree with -- it's unverified, not
+    // shaky. Only samples that actively contradict each other (variants > 1)
+    // are a real review candidate; counting samples===1 here made "저신뢰"
+    // mostly noise (836 of 1,168 cells, only 166 genuine disagreements).
     if (c.samples === 0) return ["empty", "그릴 것"];
-    if (c.variants > 1 || c.samples === 1) return ["shaky", "저신뢰"];
+    if (c.variants > 1) return ["shaky", "저신뢰"];
     return ["ok", "확정"];
   }
   function renderList() {

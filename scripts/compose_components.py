@@ -30,14 +30,16 @@ same (종성,중성) can yield a 0px or a 57px zone), but note the instability i
 NOT only the cut's fault -- extracting 종성 by exact subtraction instead gave
 the identical 59% impurity, so most of it is real design variation. Either
 way, extracted cells are candidates to review, not truth: `--missing` lists
-what has no sample at all, `--report` ranks the rest by how shaky it is.
+what has no sample at all, `--report` lists cells whose samples actively
+disagree with each other (a single sample isn't shaky -- there's nothing
+for it to disagree with -- so cells with only one sample aren't included).
 
 CLI (run from repo root):
   python scripts/compose_components.py --validate   # rebuild the corpus, px error
   python scripts/compose_components.py --loo        # honest estimate for unseen
   python scripts/compose_components.py --coverage   # 11,172 composability
   python scripts/compose_components.py --missing    # cells with no sample (draw these)
-  python scripts/compose_components.py --report     # low-confidence cells, worst first
+  python scripts/compose_components.py --report     # cells whose samples disagree, worst first
 """
 import argparse
 import json
@@ -290,16 +292,22 @@ def main():
             print(f"  {kind:4s} {jamo}  벌{beol}  잠긴 음절 {blocked[cell]}")
 
     if args.report:
-        # Extracted-but-shaky cells: one sample, or the corpus disagreed.
+        # A single sample isn't "shaky" -- with n=1 there is nothing for it to
+        # disagree with, so that used to dominate this list (836 of 1,168
+        # cells, only 166 of which were genuine disagreement) and made it
+        # look meaningless. Only cells whose OWN samples actually contradict
+        # each other are real review candidates; --missing already covers
+        # "no sample yet" separately.
         rows_out = []
         for cell, cand in seen.items():
+            if len(cand) <= 1:
+                continue
             n = sum(cand.values())
             top = cand.most_common(1)[0][1]
             rows_out.append((len(cand), n - top, n, cell))
         rows_out.sort(key=lambda r: (-r[0], -r[1]))
-        shaky = [r for r in rows_out if r[0] > 1 or r[2] == 1]
-        print(f"\nlow-confidence cells ({len(shaky)} of {len(seen)}), worst first:")
-        for variants, lost, n, cell in shaky[:40]:
+        print(f"\ncells with disagreeing samples ({len(rows_out)} of {len(seen)}), worst first:")
+        for variants, lost, n, cell in rows_out[:40]:
             kind, jamo, beol = cell
             print(f"  {kind:4s} {jamo} 벌{str(beol):18s} 샘플 {n:3d} · 변이 {variants} · 불일치 {lost}")
 
