@@ -41,6 +41,10 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              counts, blocked-syllable counts, and a suggested
                              representative syllable to draw. Backs the
                              component editor at /components.
+  POST /api/cell_preview  -> {ch, rows} -> composes the ~27 syllables built
+                             from the cell(s) `ch` belongs to, against the
+                             in-progress drawing. Confirmed syllables show
+                             their own saved pixels, not a recomposition.
   POST /api/build?weight=regular|light
                           -> rebuild that weight's TTF (build_ufo -> fontmake
                              -> finalize). regular = full original-bitmap

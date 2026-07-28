@@ -121,6 +121,19 @@ def _ink(rows):
     return frozenset((y, x) for y in range(16) for x in range(16) if rows[y][x] == "#")
 
 
+def zone_parts(ch, rows, pc98, cho_ref, corpus):
+    """This syllable's own cell -> pixels, cut by PC-98's 받침 variance zone.
+    None when PC-98 has no such glyph (i.e. outside KS X 1001)."""
+    if pc98(ch) is None:
+        return None
+    cv_c, *rest = cells_for(ch)
+    cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
+    parts = {cv_c: on(rows, cz) | on(rows, vz)}            # everything above 받침
+    if rest:
+        parts[rest[0]] = on(rows, jz)
+    return parts
+
+
 def observe(corpus, pc98, cho_ref):
     """cell -> Counter of candidate pixel sets seen in the corpus.
 
@@ -135,14 +148,12 @@ def observe(corpus, pc98, cho_ref):
     seen = defaultdict(Counter)
     deferred = []
     for ch, rows in corpus.items():
-        cv_c, *rest = cells_for(ch)
-        if pc98(ch) is not None:
-            cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
-            seen[cv_c][on(rows, cz) | on(rows, vz)] += 1   # everything above 받침
-            if rest:
-                seen[rest[0]][on(rows, jz)] += 1
-        else:
+        parts = zone_parts(ch, rows, pc98, cho_ref, corpus)
+        if parts is None:
             deferred.append((ch, rows))
+            continue
+        for cell, px in parts.items():
+            seen[cell][px] += 1
 
     # Resolve by subtraction, repeating while anything still gets solved: a
     # syllable filled this round can be the known side for the next one.
