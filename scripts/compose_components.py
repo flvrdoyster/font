@@ -15,39 +15,50 @@ Why 벌식, measured (see ROADMAP for the full table):
 
 The cells (leave-one-out 79.4% exact / 1.48px mean at full coverage):
 
-  초중성 = (초성, 중성, 받침유무)                 19 x 21 x 2 = 798 cells
-  종성   = (종성, 중성), but 겹받침 11종은 (종성)만 = 16 x 21 + 11 = 347 cells
+  초중성 = (초성, 중성, 받침유무)                     19 x 21 x 2 = 798 cells
+  종성   = (종성, 중성), 겹받침 11종만 (종성, 가로/세로) = 16 x 21 + 22 = 358 cells
 
 초성 and 중성 are ONE cell, not two. Splitting them was measured to be
 unfounded: a 초성벌 keyed on (중성,받침유무) and a 중성벌 keyed on (받침유무,초성)
 are both determined by (초성,중성,받침유무), so the two always appear together
 and no corpus evidence can separate them.
 
-겹받침(두 자음이 겹친 11종: ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ)도 중성별로 나누지 않는다: 확정된
-152개 표본으로 leave-one-out한 결과 중성별 21벌 유지 92.5%(n=106, 표본 1개뿐인 셀이
-많아 사실상 편향된 부분표본) vs 가로/세로 2벌 80.7%(n=150) vs 아예 하나로 합침
-78.9%(n=152, 전체) -- 2벌과 통합 사이 차이가 1.8pt뿐이라 세분화가 거의 이득이 없다.
-겹받침은 이미 받침 자리를 거의 다 채우는 두꺼운 모양이라 중성이 어디 있든 잘 안
-바뀐다는 뜻. 이 11종은 (종성) 하나로만 키를 잡아 최대 231칸을 11칸으로 줄인다. ㅆ도
-같은 실험에서 통합이 82.8%로 21벌과 동률이었지만, 사용자 판단으로 일단 겹받침
-11종에만 적용하고 ㅆ은 기존 21벌을 유지한다.
+겹받침(두 자음이 겹친 11종: ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ)만 중성별 대신 compose_light의
+가로/세로 받침 구분(jong_bt)으로 거칠게 잡는다 -- 231칸이 22칸이 되고 정확도 손실은
+전체 격차의 1/5. 자세한 수치와, 한때 이걸 11칸으로 더 합쳤다가 가로모음 1,045자를
+망가뜨린 경위는 jong_beol()의 주석 참고. ㅆ은 21벌 그대로다.
+
+측정 시 주의: 모음 계열(가로/세로)을 뭉쳐서 평균만 보면 안 된다. 겹받침 표본은
+세로모음에 치우쳐 있어(107 대 53) 가로모음이 망가져도 평균은 멀쩡해 보인다.
 
 초중성 is cut out of the confirmed corpus as the ink outside compose_light's
-PC-98 받침 variance zone; 종성 is the ink inside it. That cut is unstable (the
-same (종성,중성) can yield a 0px or a 57px zone), but note the instability is
-NOT only the cut's fault -- extracting 종성 by exact subtraction instead gave
-the identical 59% impurity, so most of it is real design variation. Either
-way, extracted cells are candidates to review, not truth: `--missing` lists
-what has no sample at all, `--report` lists cells whose samples actively
-disagree with each other (a single sample isn't shaky -- there's nothing
-for it to disagree with -- so cells with only one sample aren't included).
+PC-98 받침 변화 zone; 종성 is the ink inside it. That zone is passed through
+batchim_block() first -- raw, it also swallows part of the 초성 and so deletes
+strokes when a 종성 component is pasted from another syllable. See that
+function; it is the single biggest correctness fix this cut has had.
+
+Do NOT read that instability as a quality signal. A `--report` used to rank
+cells by how much their samples disagreed; measuring what it actually
+contained killed it. Of 184 flagged cells, 49% had source glyphs that were
+pixel-identical where the extracts disagreed (the zone merely caught different
+pixels), 19% were artifacts of the subtraction path below, and the remaining
+32% differed by 1-3px -- deliberate optical corrections at 16px, which the
+confirmed glyphs are full of and which are not errors. Nothing actionable
+survived, so only `--missing` (cells with no sample at all) is left.
+
+The same caveat applies to --validate and --loo: they count an exact pixel
+match, so they read low even where the output is perfectly usable.
 
 CLI (run from repo root):
   python scripts/compose_components.py --validate   # rebuild the corpus, px error
   python scripts/compose_components.py --loo        # honest estimate for unseen
   python scripts/compose_components.py --coverage   # 11,172 composability
   python scripts/compose_components.py --missing    # cells with no sample (draw these)
-  python scripts/compose_components.py --report     # cells whose samples disagree, worst first
+  python scripts/compose_components.py --build      # write the full 11,172 for review
+
+--build is a REVIEW draft, not a shipping build: build_ufo.py doesn't read
+its output. LOO says ~20% of the composed (non-hand-confirmed) syllables
+will need a human eye before this is ready to fold into the real font.
 """
 import argparse
 import json
@@ -65,6 +76,8 @@ ROOT = cl.ROOT
 # reading the source of truth lets them feed straight back in.
 CORPUS = os.path.join(ROOT, "tools", "glyphs_light.json")
 FULL = [chr(c) for c in range(0xAC00, 0xD7A4)]              # all 11,172
+FULL_OUT = os.path.join(ROOT, "build", "light_hangul_full.json")
+FULL_SPECIMEN = os.path.join(ROOT, "build", "light_hangul_full_specimen.png")
 
 
 # ---- cells ------------------------------------------------------------------
@@ -78,15 +91,26 @@ def cv_beol(jong):
 
 
 def jong_beol(jong, jung):
-    """받침 width/position follows the vowel above it -- except 겹받침 (two
-    stacked consonants), measured to barely reshape with the vowel at all:
-    leave-one-out on the 152 confirmed 겹받침 samples gave 78.9% exact/1.88px
-    collapsed to one shape vs 80.7%/1.62px even at a coarse 2-way (가로/세로)
-    split, i.e. the split bought almost nothing. They're wide enough to fill
-    the batchim row regardless of where the vowel sits, so they collapse to
-    one shape per jamo, no jung distinction -- 11 cells instead of up to 231."""
+    """받침 width/position follows the vowel above it. 겹받침 (two stacked
+    consonants) coarsen to compose_light's own 가로/세로 batchim split instead
+    of keying on the exact vowel: 22 cells rather than 231, for a fifth of the
+    accuracy gap.
+
+    They were briefly collapsed all the way to one shape per jamo on a
+    leave-one-out number that averaged the two vowel classes together and so
+    hid the failure. Split apart, the horizontal-vowel syllables were the ones
+    paying: ㄳ has six samples and only 몫 is horizontal, so majority vote gave
+    all 1,045 ㅗ/ㅛ/ㅜ/ㅠ/ㅡ 겹받침 syllables a batchim positioned for a
+    vertical vowel. On a common test set:
+
+        중성 무시   11 cells  exact 70.6%  2.08px   (가로 0.78px)
+        가로/세로   22 cells  exact 75.5%  1.55px   (가로 0.14px)
+        중성별      231 cells  exact 86.3%  0.35px
+
+    Anything finer than 가로/세로 buys nothing until more is drawn -- a 3-way
+    split that also separates 복합 vowels scored identically to the 2-way."""
     if jong in cl.CLUSTER_JONG:
-        return ()
+        return (cl.jong_bt(jung),)
     return (jung,)
 
 
@@ -123,9 +147,32 @@ def build_zone_indices(corpus, pc98):
     return cl.build_indices(covered)[0]
 
 
+def batchim_block(jz):
+    """jong_zone minus the 초성 pixels it wrongly picks up.
+
+    PC-98 reshapes the 초성 depending on the batchim, so "pixels that move when
+    only the 종성 varies" catches part of the initial too -- for 각/간/... it
+    grabs (1,6) and (2..3, 5..6), the 6th cell of ㄱ's bar and its stem. Those
+    then live in the 종성 component, and pasting some other syllable's 종성
+    deletes them: 갃 came out with a 5-wide stemless ㄱ because its ㄳ component
+    was cut from 넋 (ㄴ+ㅓ), which has no ink there.
+
+    The initial's leak is always separated from the real batchim by at least
+    one blank row, so keeping only the bottom contiguous run of rows drops it.
+    Measured over the confirmed corpus: 87.2% -> 88.4% exact, 0.96 -> 0.93px."""
+    if not jz:
+        return jz
+    rows = sorted({y for y, _ in jz})
+    cut = rows[0]
+    for a, b in zip(rows, rows[1:]):
+        if b - a > 1:
+            cut = b
+    return {(y, x) for (y, x) in jz if y >= cut}
+
+
 def zones(ch, pc98, cho_ref, refs):
     cho, jung, jong = cl.decompose(ch)
-    jz = cl.jong_zone(ch, pc98) if jong else set()
+    jz = batchim_block(cl.jong_zone(ch, pc98)) if jong else set()
     cz = cl.cho_zone(ch, pc98, cho_ref, refs) - jz
     vz = cl.ALL_PX - jz - cz
     return cz, vz, jz
@@ -141,59 +188,90 @@ def _ink(rows):
 
 def zone_parts(ch, rows, pc98, cho_ref, corpus):
     """This syllable's own cell -> pixels, cut by PC-98's 받침 variance zone.
-    None when PC-98 has no such glyph (i.e. outside KS X 1001)."""
+    None when the zone cut cannot be trusted and the caller must fall back to
+    subtraction: either PC-98 has no such glyph (outside KS X 1001), or it has
+    too few of this (초성,중성) to measure the 받침 zone at all.
+
+    That second case is not rare and it was corrupting the library. jong_zone
+    needs at least two PC-98 syllables sharing (초성,중성) to see what moves; for
+    combinations KS X 1001 barely covers (ㅍ+ㅝ, say) it finds none and returns
+    an EMPTY zone. The 받침 then counts as 초중성 ink, so the 초중성 component
+    ships with a batchim baked in -- and composing adds the real 종성 on top of
+    it. 풜 came out with two stacked batchims filling the lower half. Hand-drawn
+    glyphs never contain a filled 3x3 block (0 of 2,669); composed ones did in
+    159 syllables, which this cut to 84."""
     if pc98(ch) is None:
         return None
     cv_c, *rest = cells_for(ch)
     cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
+    if rest and not jz:
+        return None
     parts = {cv_c: on(rows, cz) | on(rows, vz)}            # everything above 받침
     if rest:
         parts[rest[0]] = on(rows, jz)
     return parts
 
 
-def observe(corpus, pc98, cho_ref):
-    """cell -> Counter of candidate pixel sets seen in the corpus.
+# A 초중성 sitting above a 받침 never reaches below this row. Anything deeper
+# is batchim ink the cut failed to take out, and unioning a real 종성 on top of
+# it is what produced solid bricks (풜, 뒐). Rejecting those splits outright
+# took filled-3x3 blobs from 159 to 0; hand-drawn glyphs have none in 2,669.
+CV_FLOOR = 9
 
-    Two extraction paths. Syllables PC-98 also has get cut by its 받침 variance
-    zone, as before. Representative syllables drawn to fill an empty cell are
-    by definition outside KS X 1001, so PC-98 has no such glyph and no zone can
-    be derived -- those are split by subtraction instead: whichever of the two
-    cells is already known is removed, and the remainder is the other one.
-    Sound because the model composes by union, so subtraction is its inverse;
-    it just needs one side known, which holds for every cell that currently
-    needs drawing."""
-    seen = defaultdict(Counter)
-    deferred = []
+
+def _cv_polluted(cell, px):
+    return (cell[0] == "cv" and cell[2][0] and px
+            and max(y for y, _ in px) > CV_FLOOR)
+
+
+def observe(corpus, pc98, cho_ref):
+    """cell -> Counter of candidate pixel sets.
+
+    Measured first: a syllable splits by PC-98's 받침 zone only when PC-98 can
+    actually show where the 받침 ends (zone_parts returns None otherwise), and
+    only when the resulting 초중성 respects CV_FLOOR. A syllable with no 받침
+    needs no split, so it always counts.
+
+    Everything else -- representative syllables drawn to fill a cell, which are
+    outside KS X 1001 by definition -- gets ONE subtraction pass: remove the
+    already-measured other cell, keep the remainder. Two rules make this safe,
+    both learned the hard way:
+
+      * subtract only MEASURED components, never another subtraction's output.
+        Chaining let one bad split seed the next and manufactured components
+        nobody drew.
+      * drop a 초중성 remainder that breaks CV_FLOOR rather than storing it.
+
+    Without the pass a drawn representative could never fill its own cell (맔
+    is outside PC-98, so 종성 ㄽ stayed empty however often it was drawn), which
+    makes the --missing worklist unfulfillable. With it, and the two rules:
+    93.6% exact, 0.49px, 0 blobs, 176 cells left to draw."""
+    measured = defaultdict(Counter)
+    leftover = []
     for ch, rows in corpus.items():
         parts = zone_parts(ch, rows, pc98, cho_ref, corpus)
-        if parts is None:
-            deferred.append((ch, rows))
+        if parts is None or any(_cv_polluted(c, px) for c, px in parts.items()):
+            cells = cells_for(ch)
+            if len(cells) == 1:               # no 받침 -> nothing to split off
+                measured[cells[0]][_ink(rows)] += 1
+            else:
+                leftover.append((ch, rows))
             continue
         for cell, px in parts.items():
-            seen[cell][px] += 1
+            measured[cell][px] += 1
 
-    # Resolve by subtraction, repeating while anything still gets solved: a
-    # syllable filled this round can be the known side for the next one.
-    while deferred:
-        progressed = []
-        for ch, rows in deferred:
-            cv_c, *rest = cells_for(ch)
-            jong_c = rest[0] if rest else None
-            px = _ink(rows)
-            cv_known = seen.get(cv_c)
-            jong_known = seen.get(jong_c) if jong_c else None
-            if jong_c is None:
-                seen[cv_c][px] += 1                       # no 받침: all of it
-            elif jong_known:
-                seen[cv_c][px - jong_known.most_common(1)[0][0]] += 1
-            elif cv_known:
-                seen[jong_c][px - cv_known.most_common(1)[0][0]] += 1
-            else:
-                progressed.append((ch, rows))             # neither side known yet
-        if len(progressed) == len(deferred):
-            break                                          # nothing solvable left
-        deferred = progressed
+    seen = {cell: Counter(c) for cell, c in measured.items()}
+    for ch, rows in leftover:
+        cv_c, jong_c = cells_for(ch)
+        px = _ink(rows)
+        for target, other in ((jong_c, cv_c), (cv_c, jong_c)):
+            if target in measured or other not in measured:
+                continue
+            cand = px - measured[other].most_common(1)[0][0]
+            if _cv_polluted(target, cand):
+                continue
+            seen.setdefault(target, Counter())[cand] += 1
+            break
     return seen
 
 
@@ -237,7 +315,7 @@ def main():
     ap.add_argument("--loo", type=int, nargs="?", const=300, metavar="N")
     ap.add_argument("--coverage", action="store_true")
     ap.add_argument("--missing", action="store_true")
-    ap.add_argument("--report", action="store_true")
+    ap.add_argument("--build", action="store_true")
     args = ap.parse_args()
 
     corpus = load_corpus()
@@ -269,16 +347,20 @@ def main():
         sample = random.sample(sorted(corpus), min(args.loo, len(corpus)))
         errs, skipped = [], 0
         for ch in sample:
-            held = {cell: Counter(c) for cell, c in seen.items()}
-            czs, vz, jz = zones(ch, pc98, cho_ref, corpus)
             rows = corpus[ch]
-            parts = [on(rows, czs) | on(rows, vz)]
-            if cl.decompose(ch)[2]:
-                parts.append(on(rows, jz))
-            for cell, part in zip(cells_for(ch), parts):
-                held[cell][part] -= 1
-                if held[cell][part] <= 0:
-                    del held[cell][part]
+            # Mirror observe()'s own accept/reject, then hold out exactly what
+            # this syllable contributed. A split it rejected never entered the
+            # library, so there is nothing to remove and nothing to test.
+            own = zone_parts(ch, rows, pc98, cho_ref, corpus)
+            if own is None or any(_cv_polluted(c, px) for c, px in own.items()):
+                skipped += 1
+                continue
+            held = {cell: Counter(c) for cell, c in seen.items()}
+            for cell, part in own.items():
+                if held.get(cell, {}).get(part):
+                    held[cell][part] -= 1
+                    if held[cell][part] <= 0:
+                        del held[cell][part]
             sub = {cell: c.most_common(1)[0][0] for cell, c in held.items() if c}
             out = compose(ch, sub)
             if out is None:
@@ -305,27 +387,60 @@ def main():
         print(f"\ncells with no sample -- draw these ({len(todo)}):")
         for cell in sorted(todo, key=lambda c: -blocked[c]):
             kind, jamo, beol = cell
-            print(f"  {kind:4s} {jamo}  벌{beol}  잠긴 음절 {blocked[cell]}")
+            print(f"  {kind:4s} {jamo}  벌{beol}  영향 음절 {blocked[cell]}")
 
-    if args.report:
-        # A single sample isn't "shaky" -- with n=1 there is nothing for it to
-        # disagree with, so that used to dominate this list (836 of 1,168
-        # cells, only 166 of which were genuine disagreement) and made it
-        # look meaningless. Only cells whose OWN samples actually contradict
-        # each other are real review candidates; --missing already covers
-        # "no sample yet" separately.
-        rows_out = []
-        for cell, cand in seen.items():
-            if len(cand) <= 1:
-                continue
-            n = sum(cand.values())
-            top = cand.most_common(1)[0][1]
-            rows_out.append((len(cand), n - top, n, cell))
-        rows_out.sort(key=lambda r: (-r[0], -r[1]))
-        print(f"\ncells with disagreeing samples ({len(rows_out)} of {len(seen)}), worst first:")
-        for variants, lost, n, cell in rows_out[:40]:
-            kind, jamo, beol = cell
-            print(f"  {kind:4s} {jamo} 벌{str(beol):18s} 샘플 {n:3d} · 변이 {variants} · 불일치 {lost}")
+    if args.build:
+        full = {}
+        composed_flag = {}
+        for ch in FULL:
+            if ch in corpus:
+                full[ch] = corpus[ch]
+                composed_flag[ch] = False
+            else:
+                out = compose(ch, lib)
+                if out is not None:
+                    full[ch] = out
+                    composed_flag[ch] = True
+        os.makedirs(os.path.dirname(FULL_OUT), exist_ok=True)
+        json.dump(full, open(FULL_OUT, "w", encoding="utf-8"),
+                  ensure_ascii=False, indent=0)
+        hand = sum(1 for v in composed_flag.values() if not v)
+        made = sum(1 for v in composed_flag.values() if v)
+        print(f"\nbuild: {len(full)}/{len(FULL)} -> {FULL_OUT}")
+        print(f"  {hand} hand-drawn (verbatim) + {made} composed"
+              f" ({len(FULL) - len(full)} uncomposable)")
+        write_full_specimen(full, composed_flag)
+
+
+def write_full_specimen(full, composed_flag):
+    """One PNG over all 11,172 in codepoint order, no labels (too dense to be
+    legible at this scale) -- composed (non-hand-confirmed) cells get a faint
+    tint so the ones that still need a human eye stand out while scanning."""
+    from PIL import Image
+    cols, scale, pad = 100, 2, 1
+    cw = 16 * scale + pad
+    chars = FULL
+    rows = (len(chars) + cols - 1) // cols
+    W = cols * cw + pad
+    H = rows * cw + pad
+    img = Image.new("RGB", (W, H), (255, 255, 255))
+    px = img.load()
+    for i, ch in enumerate(chars):
+        gx = pad + (i % cols) * cw
+        gy = pad + (i // cols) * cw
+        rows_px = full.get(ch)
+        if rows_px is None:
+            continue
+        tint = (238, 238, 245) if composed_flag.get(ch) else (255, 255, 255)
+        for y in range(16):
+            for x in range(16):
+                on_px = rows_px[y][x] == "#"
+                color = (20, 20, 20) if on_px else tint
+                for dy in range(scale):
+                    for dx in range(scale):
+                        px[gx + x * scale + dx, gy + y * scale + dy] = color
+    img.save(FULL_SPECIMEN)
+    print(f"  specimen -> {FULL_SPECIMEN}")
 
 
 if __name__ == "__main__":

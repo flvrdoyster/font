@@ -38,10 +38,10 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              16x16 pixel design, full BMP coverage.
   GET  /api/cells         -> jamo-component cells for the 11,172 expansion
                              (scripts/compose_components.py): status, sample
-                             counts, blocked-syllable counts, and a suggested
+                             counts, affected-syllable counts, and a suggested
                              representative syllable to draw. Backs the
                              component editor at /components.
-  POST /api/cell_preview  -> {ch, rows} -> composes the ~27 syllables built
+  POST /api/cell_preview  -> {ch, rows} -> composes the syllables built
                              from the cell(s) `ch` belongs to, against the
                              in-progress drawing. Confirmed syllables show
                              their own saved pixels, not a recomposition.
@@ -515,7 +515,8 @@ def component_cells():
         return []
     cl = _composer()
     corpus = cc.load_corpus()
-    seen = cc.observe(corpus, _pc98_grid_or_none(), *_cho_ref(corpus))
+    pc98 = _pc98_grid_or_none()
+    seen = cc.observe(corpus, pc98, *_cho_ref(corpus))
     req = cc.required_cells()
 
     # candidate syllables per cell, preferring a simple free jamo
@@ -552,41 +553,73 @@ def component_cells():
         chars = cand.get(cell, [])
         cands = seen.get(cell)
         n = sum(cands.values()) if cands else 0
-        variants = len(cands) if cands else 0
-        suggest, resolvable = pick(cell, chars) if chars else (None, False)
+        # Only an EMPTY cell has anything to suggest. Once a cell has samples
+        # its shape comes from the syllables that already fed it, and drawing
+        # some other syllable can't change it: extraction outside PC-98 works
+        # by subtraction, so with the 종성 cell already known the whole glyph
+        # is charged to the 초중성 cell instead (drawing 맋 to fix jong:ㄳ put
+        # all 43px into cv:ㅁㅏ and left ㄳ untouched). Fixing a filled cell
+        # means editing one of its own `examples` -- the preview palette.
+        suggest, resolvable = (pick(cell, chars) if chars and n == 0
+                               else (None, False))
         out.append({
             "id": _cell_id(cell),
             "kind": cell[0],
             "jamo": cell[1],
             "beol": "".join(str(b) for b in cell[2]),
+            # How many corpus syllables fed this cell. NOT a confidence score:
+            # how much those samples disagree measures the 받침 zone cut and
+            # the user's own optical corrections, not glyph quality, so the
+            # variant count it used to expose has been dropped.
             "samples": n,
-            "variants": variants,
-            "blocked": len(chars),
+            "affects": len(chars),
             "suggest": suggest,
             # False means no candidate's OTHER cell is known yet -- drawing
             # `suggest` alone won't resolve this one; something else needs
             # filling first (see pick()'s docstring-comment above).
             "resolvable": resolvable,
-            # confirmed syllables already using this cell -- overlay material
-            "examples": [ch for ch in chars if ch in corpus][:12],
+            # Confirmed syllables using this cell -- the palette anchor and the
+            # only way to change an already-filled cell. PC-98-covered ones
+            # first: those are cut by the 받침 zone and so feed this cell
+            # directly, while the rest are split by subtraction and charge
+            # their ink to the OTHER cell, leaving this one untouched. Editing
+            # one of those would look like work and do nothing (the 맋 trap).
+            "examples": sorted((ch for ch in chars if ch in corpus),
+                               key=lambda ch: pc98(ch) is None)[:12],
         })
     return out
 
 
-def cell_preview(ch, rows, limit=24):
+def cell_preview(ch, rows, cell_id=None, limit=400):
     """The syllables the drawn representative actually affects.
 
-    Drawing one syllable defines a component that ~27 others are built from,
-    so the useful preview is not the syllable itself but what it does to them:
-    a component that looks fine alone can still collide or leave holes once
-    another jamo sits next to it.
+    Drawing one syllable defines a component that dozens to a few hundred
+    others are built from, so the useful preview is not the syllable itself
+    but what it does to them: a component that looks fine alone can still
+    collide or leave holes once another jamo sits next to it. The editor also
+    uses this as a palette -- click a wrong-looking one to load and fix it --
+    so the limit covers the largest cell (399) rather than a first page.
+
+    cell_id scopes the result to ONE of ch's two cells. Without it a syllable
+    pulls in everything sharing either cell, which reads as over-counting when
+    a cell is under review: opening jong:ㄳ anchors on 넋 and its 초중성 cell
+    drags in 넉/넌/널/넘..., 26 syllables with no ㄳ in them at all.
 
     Confirmed syllables show their OWN saved pixels, not a recomposition --
     when a cell's samples tie (majority-vote picks one arbitrarily), the
     library component can come from a DIFFERENT confirmed syllable than the
     one being previewed, so recomposing would silently show that other
     syllable's shape instead of the real one (seen with 눰/뛈 sharing a tied
-    jong:ㅁ:(ㅝ,) cell -- 눰's compose() result was actually 뛈's glyph)."""
+    jong:ㅁ:(ㅝ,) cell -- 눰's compose() result was actually 뛈's glyph).
+
+    The in-progress drawing is deliberately NOT forced to define its cell here.
+    Making it win looks helpful -- edit 넋 and all 280 composed ㄳ syllables
+    move with it -- but it previews a build that will never happen: saving adds
+    one sample, and majority vote keeps ignoring it while other confirmed
+    syllables agree. This panel is for REVIEW, so it has to show what actually
+    ships. Where a component is wrong for a whole class the fix is a finer 벌
+    key (see jong_beol's 가로/세로 split); where it is wrong for one syllable
+    the fix is to draw that syllable, which overrides the composition outright."""
     cc = _ccomp()
     cl = _composer()
     if cc is None or cl is None:
@@ -594,10 +627,17 @@ def cell_preview(ch, rows, limit=24):
     corpus = cc.load_corpus()
     confirmed = dict(corpus)               # keep the pre-overwrite saved rows
     corpus[ch] = rows                      # the in-progress drawing
-    seen = cc.observe(corpus, _pc98_grid_or_none(), *_cho_ref(corpus))
+    (cho_ref,) = _cho_ref(corpus)
+    seen = cc.observe(corpus, _pc98_grid_or_none(), cho_ref)
     lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
 
     mine = set(cc.cells_for(ch))
+    if cell_id:
+        # compare rendered ids rather than parsing cell_id back into a tuple --
+        # the 벌 is a heterogeneous tuple (bool for cv, jamo or empty for jong)
+        scoped = {c for c in mine if _cell_id(c) == cell_id}
+        if scoped:                         # ignore an id this syllable doesn't use
+            mine = scoped
     out = []
     for other in cc.FULL:
         if not mine & set(cc.cells_for(other)):
@@ -975,8 +1015,9 @@ class Handler(BaseHTTPRequestHandler):
             rows = body.get("rows") or []
             if not ch or not rows:
                 return self._send(400, json.dumps({"error": "ch and rows required"}))
-            return self._send(200, json.dumps({"chars": cell_preview(ch, rows)},
-                                              ensure_ascii=False))
+            return self._send(200, json.dumps(
+                {"chars": cell_preview(ch, rows, body.get("cell"))},
+                ensure_ascii=False))
         if parsed.path == "/api/halfwidth_glyphs":
             try:
                 incoming = json.loads(raw)

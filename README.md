@@ -14,7 +14,9 @@ Bold(2px)** 로 묶여 나오므로, 앱에서 볼드를 걸면(Cmd+B 등) 두�
 
 - 원본: `도깨비 디나루`(파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
 - 목표 산출물: Regular(1px)·Bold(2px) 한 패밀리 서체 + gensei-pc98용 한글 `font.bmp`
-- 커버리지: 한글 완성형 11,172자 + 라틴·가나·키릴·그리스·기호 (한자 없음)
+- 커버리지: Bold(2px)는 한글 11,172자 전부, Regular(1px)는 완성형 2,350자(KS X 1001).
+  둘 다 라틴·가나·키릴·그리스·기호 포함, 한자 없음. Regular를 11,172자로 넓히는
+  작업이 진행 중이다 — [docs/ROADMAP.md](docs/ROADMAP.md) 참고
 - 라이선스: SIL Open Font License 1.1, 예약 글꼴 이름 `Dokkaebi DNR` — [OFL.txt](OFL.txt)
 - 변환 방식: 픽셀을 64×64 유닛 정사각형으로 보고 인접 픽셀의 공유 변을 상쇄해 병합
   폴리곤을 만든다. 곡선 트레이싱을 쓰지 않으므로 확대해도 계단이 그대로 보존된다.
@@ -72,3 +74,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 `glyphs_bold.json` = 2px)에 바로 기록된다. 빌드 버튼은 한 번에 두 멤버를
 컴파일한다. 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)만 열어도
 복사 방식으로 쓸 수 있다.
+
+서버는 시작할 때 어느 페이지를 열지 묻는다. `/components`는 Regular를 11,172자로
+넓히기 위한 **부품 셀 에디터**다 — 셀을 고르고 대표 음절을 그리면 부품이 자동
+추출된다. 진행 상황은 CLI로도 볼 수 있다:
+
+```bash
+.venv/bin/python scripts/compose_components.py --coverage   # 조합 가능률
+.venv/bin/python scripts/compose_components.py --missing    # 그려야 할 셀, 영향 순
+.venv/bin/python scripts/compose_components.py --build      # 검토용 11,172자 출력
+```

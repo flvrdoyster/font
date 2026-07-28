@@ -44,7 +44,7 @@
   .pill { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 99px;
           border: 1px solid var(--grid-line); color: var(--muted); }
   .pill.empty { border-color: var(--warn); color: var(--warn); }
-  .pill.shaky { border-color: var(--accent); color: var(--accent); }
+  .pill.warn { border-color: var(--accent); color: var(--accent); }
   .pill.ok { border-color: var(--confirm); color: var(--confirm); }
   /* Fixed width, not flex:0 0 auto -- an auto-basis flex item sizes to its
      widest unbroken content (min-width:auto default), so the long "순서 필요"
@@ -75,12 +75,13 @@
   .prevgrid { display: grid; gap: 6px; max-height: 560px; overflow-y: auto;
               grid-template-columns: repeat(auto-fill, calc(var(--pvpx) + 8px)); }
   .pv { border: 1px solid var(--faint); border-radius: 6px; padding: 3px;
-        background: var(--cell-off); text-align: center; }
+        background: var(--cell-off); text-align: center; cursor: pointer; }
+  .pv:hover { border-color: var(--accent, #888); }
   .pv canvas { display: block; width: var(--pvpx); height: var(--pvpx);
                image-rendering: pixelated; }
   .pv .lbl { font-size: 9px; color: var(--muted); margin-top: 1px; }
   .pv.confirmed { border-color: var(--confirm); }
-  .pv.blocked { opacity: 0.35; }
+  .pv.blocked { opacity: 0.4; border-style: dashed; }
   .swatches { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
   .sw { border: 1px solid var(--faint); border-radius: 5px; background: var(--cell-off);
         padding: 2px; cursor: pointer; }
@@ -102,14 +103,9 @@
 
   <div class="layout">
     <div class="card list-card">
-      <div class="tabbar" role="tablist">
-        <button class="tab" data-filter="empty" role="tab" aria-selected="true">그릴 셀</button>
-        <button class="tab" data-filter="shaky" role="tab" aria-selected="false">저신뢰 셀</button>
-        <button class="tab" data-filter="all" role="tab" aria-selected="false">전체</button>
-      </div>
       <div class="rows">
         <table>
-          <thead><tr><th>셀</th><th>벌</th><th>상태</th><th>잠긴자</th><th>제안</th></tr></thead>
+          <thead><tr><th>셀</th><th>벌</th><th>상태</th><th>영향</th><th>제안</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
@@ -174,7 +170,6 @@
   const toastsEl = document.getElementById("toasts");
 
   let CELLS = [];
-  let filter = "empty";
   let cur = null;          // selected cell record
   let curChar = null;      // representative syllable being drawn
   let cells = blank();
@@ -253,7 +248,10 @@
     try {
       const res = await fetch("api/cell_preview", {
         method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ch: curChar, rows: toRows()}),
+        // scope to the selected cell, or the anchor's OTHER cell drags in
+        // syllables that don't use this component at all
+        body: JSON.stringify({ch: curChar, rows: toRows(),
+                              cell: cur && cur.id}),
       });
       out = (await res.json()).chars || [];
     } catch (err) { meta.textContent = "미리보기 실패"; return; }
@@ -263,7 +261,7 @@
       const d = document.createElement("div");
       d.className = "pv" + (c.confirmed ? " confirmed" : "") + (c.rows ? "" : " blocked");
       d.title = c.rows ? (c.confirmed ? `${c.ch} (확정본)` : `${c.ch} (조합)`)
-                       : `${c.ch} — 다른 셀이 아직 비어 조합 불가`;
+                       : `${c.ch} — 다른 셀이 아직 비어 조합 불가. 눌러서 직접 그리면 채워집니다.`;
       const cv = document.createElement("canvas");
       cv.width = 16; cv.height = 16;
       if (c.rows) {
@@ -277,6 +275,13 @@
       const lbl = document.createElement("div");
       lbl.className = "lbl"; lbl.textContent = c.ch;
       d.appendChild(cv); d.appendChild(lbl); el.appendChild(d);
+      // palette: click any affected syllable to load and fix it directly,
+      // instead of only ever being able to draw the cell's own `suggest`
+      // (which can't touch an already-resolved cell at all -- see 맋/jong:ㄳ).
+      // Uncomposable ones are clickable too and matter MOST -- drawing one is
+      // exactly what fills the empty cell blocking it. It just opens blank,
+      // with the Bold skeleton underneath, since there is nothing to seed from.
+      d.addEventListener("click", () => loadChar(c.ch, c.rows));
     }
     meta.textContent = `이 부품을 쓰는 음절 ${out.length}개 · 조합됨 ${composed}`;
   }
@@ -348,21 +353,19 @@
 
   // ---- list ----
   function status(c) {
-    // A single sample has nothing to disagree with -- it's unverified, not
-    // shaky. Only samples that actively contradict each other (variants > 1)
-    // are a real review candidate; counting samples===1 here made "저신뢰"
-    // mostly noise (836 of 1,168 cells, only 166 genuine disagreements).
-    if (c.samples === 0) return ["empty", "그릴 것"];
-    if (c.variants > 1) return ["shaky", "저신뢰"];
-    return ["ok", "확정"];
+    // No "저신뢰" tier: sample disagreement turned out to measure extraction
+    // mechanics, not glyph quality. Of 184 flagged cells, 49% had source
+    // glyphs that were pixel-identical where the extracts disagreed (the 받침
+    // zone just caught different pixels), 19% were subtraction-path artifacts,
+    // and the rest differed by 1-3px -- deliberate optical corrections, not
+    // errors. Nothing actionable was left, so the tier is gone.
+    return c.samples === 0 ? ["empty", "그릴 것"] : ["ok", "확정"];
   }
   function renderList() {
-    const shown = CELLS.filter(c => {
-      const [k] = status(c);
-      return filter === "all" || k === filter;
-    });
+    // most syllables fixed per cell first -- the review order
+    const shown = CELLS.slice().sort((a, b) => b.affects - a.affects);
     rowsEl.innerHTML = "";
-    for (const c of shown.slice(0, 600)) {
+    for (const c of shown) {          // 1,145 rows, no cap -- the list is the review queue
       const [k, label] = status(c);
       const tr = document.createElement("tr");
       tr.className = "row"; tr.dataset.id = c.id;
@@ -371,28 +374,20 @@
         `<td><span class="jamo">${c.jamo}</span> <span class="pill">${c.kind}</span></td>` +
         `<td>${c.beol}</td>` +
         `<td><span class="pill ${k}">${label}</span>` +
-        (c.samples ? ` <span class="pill">샘플 ${c.samples}·변이 ${c.variants}</span>` : "") +
-        `</td><td>${c.blocked}</td>` +
+        (c.samples ? ` <span class="pill">샘플 ${c.samples}</span>` : "") +
+        `</td><td>${c.affects}</td>` +
         `<td class="jamo">${c.suggest || "—"}` +
         (c.suggest && !c.resolvable
-          ? ` <span class="pill shaky" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>`
+          ? ` <span class="pill warn" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>`
           : "") +
         `</td>`;
       tr.addEventListener("click", () => selectCell(c));
       rowsEl.appendChild(tr);
     }
+    const todo = CELLS.filter(c => c.samples === 0).length;
     document.getElementById("status").textContent =
-      `${shown.length}셀 · 그릴 것 ${CELLS.filter(c => c.samples === 0).length}`;
+      `${shown.length}셀` + (todo ? ` · 그릴 것 ${todo}` : "");
   }
-  // [data-filter], not .tab -- the preview's 2x/3x buttons share that class,
-  // and matching them here would set filter to undefined and blank the list.
-  document.querySelectorAll("[data-filter]").forEach(b =>
-    b.addEventListener("click", () => {
-      filter = b.dataset.filter;
-      document.querySelectorAll("[data-filter]").forEach(x =>
-        x.setAttribute("aria-selected", x === b ? "true" : "false"));
-      renderList();
-    }));
 
   // ---- select / load ----
   function setCpLabel(ch) {
@@ -405,14 +400,16 @@
     setCpLabel(null);
     document.getElementById("cellMeta").textContent =
       `${c.kind === "cv" ? "초중성" : "종성"} ${c.jamo} · 벌 ${c.beol} · ` +
-      `잠긴 음절 ${c.blocked} · 샘플 ${c.samples}` +
-      (c.variants > 1 ? ` · 변이 ${c.variants}` : "") +
+      `영향 음절 ${c.affects} · 샘플 ${c.samples}` +
       (c.suggest && !c.resolvable
         ? "  ⚠ 다른 셀이 아직 안 풀려서 이 글자만 그려선 안 풀립니다 — 그려두면 나중에 그 셀이 풀릴 때 자동으로 같이 풀립니다."
         : "");
     renderList();
     renderSwatches(c);
-    await loadChar(c.suggest);
+    // A filled cell has no suggestion (nothing new to draw would change it),
+    // so open one of its own confirmed syllables -- that both fills the canvas
+    // and anchors the preview palette on this cell instead of the previous one.
+    await loadChar(c.suggest || (c.examples || [])[0]);
   }
   function renderSwatches(c) {
     const el = document.getElementById("swatches");
@@ -434,14 +431,16 @@
         });
     }
   }
-  async function loadChar(ch) {
+  async function loadChar(ch, seedRows) {
     curChar = ch;
     if (!ch) { cells = blank(); boldRows = null; setCpLabel(null); buildGrid(); return; }
     document.getElementById("cellName").textContent = `${cur.id}   ← ${ch}`;
     setCpLabel(ch);
-    // existing confirmed glyph for this syllable, if any
+    // existing confirmed glyph for this syllable, if any. seedRows is the
+    // composed result for an unconfirmed one clicked in the preview -- start
+    // from what's actually wrong rather than from an empty canvas.
     const j = await (await fetch("api/glyphs?weight=light", {cache: "no-store"})).json();
-    cells = j[ch] ? toCells(j[ch]) : blank();
+    cells = j[ch] ? toCells(j[ch]) : (seedRows ? toCells(seedRows) : blank());
     // Bold on purpose, unthinned: it shows the original skeleton as drawn, and
     // deciding which stroke survives the 1px reduction is a visual call to make
     // against it, not something to pre-apply.
