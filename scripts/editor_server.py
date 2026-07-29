@@ -452,6 +452,19 @@ def _cell_id(cell):
     return f"{kind}:{jamo}:{''.join(str(b) for b in beol)}"
 
 
+def _beol_label(cell):
+    """The 벌 as something readable. The raw tuple is a bare bool for two of
+    the three cases -- and means a different thing in each -- so showing it
+    verbatim put "True"/"False" in the editor with no way to tell which axis
+    it referred to. See compose_components.lv_beol / t_beol."""
+    kind, jamo, beol = cell
+    if kind == "LV":
+        return "받침" if beol[0] else "민글자"
+    if isinstance(beol[0], bool):          # 겹받침: keyed on 초중성 width
+        return "넓은 초중성" if beol[0] else "좁은 초중성"
+    return beol[0]                          # 홑받침: the 중성 itself
+
+
 def component_cells():
     """Every cell the 11,172 needs, with its status and a suggested syllable
     to draw. Status: filled (has corpus samples) / empty (draw this one)."""
@@ -520,7 +533,7 @@ def component_cells():
             "id": _cell_id(cell),
             "kind": cell[0],
             "jamo": cell[1],
-            "beol": "".join(str(b) for b in cell[2]),
+            "beol": _beol_label(cell),
             # How many corpus syllables fed this cell. NOT a confidence score:
             # how much those samples disagree measures the 받침 zone cut and
             # the user's own optical corrections, not glyph quality, so the

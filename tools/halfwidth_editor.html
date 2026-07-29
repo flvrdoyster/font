@@ -1,30 +1,12 @@
 <style>
+  /* Light only -- see pixel_editor.html for why. */
   :root {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
     --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
     --confirm: #2e8b4f;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
-      --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-      --grid-line: #383d47; --ref: #6ea2ff; --ref-soft: #1e2a45; --ref2: #ff6b60;
-      --confirm: #4fbf78;
-    }
-  }
-  :root[data-theme="light"] {
-    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
-    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
-    --confirm: #2e8b4f;
-  }
-  :root[data-theme="dark"] {
-    --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
-    --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-    --grid-line: #383d47; --ref: #6ea2ff; --ref-soft: #1e2a45; --ref2: #ff6b60;
-    --confirm: #4fbf78;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--ground); }
