@@ -158,7 +158,9 @@
   .cell-split { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
   .cell-list { flex: 1 1 460px; min-width: 340px; max-height: 320px; overflow-y: auto;
     border: 1px solid var(--faint); border-radius: 8px; }
-  .cell-affected { flex: 1 1 300px; min-width: 260px; margin-top: 0 !important; }
+  .cell-affected { flex: 1 1 300px; min-width: 260px; }
+  p.cell-affected { color: var(--muted); align-self: center; }
+  .cell-affected[hidden] { display: none; }
   .celltable { width: 100%; border-collapse: collapse; font-size: 12px; }
   .celltable th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px;
     padding: 5px 8px; position: sticky; top: 0; background: var(--panel); }
@@ -297,26 +299,36 @@
       <button class="ptab" data-cat="symbols" role="tab" aria-selected="false">기호</button>
       <button class="ptab" data-cat="cells" role="tab" aria-selected="false">부품 셀</button>
     </div>
+    <!-- Every category has the same shape: one scroll box, and inside it a
+         .palette-group per set (sublabel + swatch grid). Latin used to have
+         no box at all and 기호 put the box around the whole set list, so the
+         three read as three different components. -->
     <div class="palette-cat" data-cat="latin">
-      <div class="palette-group">
-        <p class="sublabel">반각 A–Z · a–z · 0–9</p>
-        <div class="palette" id="paletteHalf"></div>
-      </div>
-      <div class="palette-group">
-        <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９</p>
-        <div class="palette" id="paletteFull"></div>
+      <div class="palette-scroll">
+        <div class="palette-group">
+          <p class="sublabel">반각 A–Z · a–z · 0–9</p>
+          <div class="palette" id="paletteHalf"></div>
+        </div>
+        <div class="palette-group">
+          <p class="sublabel">전각 Ａ–Ｚ · ａ–ｚ · ０–９</p>
+          <div class="palette" id="paletteFull"></div>
+        </div>
       </div>
     </div>
     <div class="palette-cat" data-cat="hangul" hidden>
-      <div class="palette-group">
-        <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
-        <div class="palette-scroll"><div class="palette" id="paletteAll2350"></div></div>
+      <div class="palette-scroll">
+        <div class="palette-group">
+          <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
+          <div class="palette" id="paletteAll2350"></div>
+        </div>
       </div>
     </div>
     <div class="palette-cat" data-cat="kana" hidden>
-      <div class="palette-group">
-        <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자)</p>
-        <div class="palette-scroll"><div class="palette" id="paletteKana"></div></div>
+      <div class="palette-scroll">
+        <div class="palette-group">
+          <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자)</p>
+          <div class="palette" id="paletteKana"></div>
+        </div>
       </div>
     </div>
     <div class="palette-cat" data-cat="symbols" hidden>
@@ -336,12 +348,15 @@
             <tbody id="cellRows"></tbody>
           </table>
         </div>
-        <div class="palette-group cell-affected">
-          <p class="sublabel" id="cellPrevMeta">셀을 고르세요</p>
-          <!-- hidden until a cell is picked: an empty bordered scroll box just
-               reserves width for nothing -->
-          <div class="palette-scroll" id="cellPrevBox" hidden><div class="palette" id="paletteCells"></div></div>
+        <!-- hidden until a cell is picked: an empty bordered scroll box just
+             reserves width for nothing -->
+        <div class="palette-scroll cell-affected" id="cellPrevBox" hidden>
+          <div class="palette-group">
+            <p class="sublabel" id="cellPrevMeta"></p>
+            <div class="palette" id="paletteCells"></div>
+          </div>
         </div>
+        <p class="sublabel cell-affected" id="cellPrevEmpty">셀을 고르세요</p>
       </div>
     </div>
   </section>
@@ -640,30 +655,36 @@
   function paletteSource(ch) {
     return DATA[ch] ? DATA[ch].rows : (paletteData[ch] || null);
   }
+  // The one swatch builder. Both palettes (the character sets and 부품 셀's
+  // affected-syllable list) go through it, so state colours, canvas sizing and
+  // the title wording can't drift apart -- they had, down to calling the same
+  // state "저장된 확정본" in one and "확정본" in the other.
+  //   confirmed: hand-drawn and saved (green)   composed: derived preview
+  //   neither:   nothing to show yet (dashed)
+  function swatchFor(ch, rows, confirmed, blockedNote) {
+    const s = document.createElement("button");
+    s.className = "swatch" + (confirmed ? " saved" : "") + (rows ? "" : " empty");
+    s.dataset.ch = ch;
+    s.title = ch + (confirmed ? " (확정본)" : rows ? " (조합)" : (blockedNote || " (안 그려짐)"));
+    const cv = document.createElement("canvas");
+    const w = rows ? rows[0].length : canonicalWidth(ch);
+    cv.width = w; cv.height = H;
+    if (rows) {
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+      for (let y = 0; y < H; y++)
+        for (let x = 0; x < w; x++)
+          if (rows[y] && rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
+    }
+    s.appendChild(cv);
+    s.addEventListener("click", () => loadChar(ch));
+    return s;
+  }
   function buildPaletteGroup(containerId, chars) {
     const pal = document.getElementById(containerId);
     pal.innerHTML = "";
-    for (const ch of chars) {
-      const rows = paletteSource(ch);
-      const saved = !!DATA[ch];
-      const s = document.createElement("button");
-      s.className = "swatch" + (saved ? " saved" : "") + (rows ? "" : " empty");
-      s.dataset.ch = ch;
-      s.title = ch + (saved ? " (저장된 확정본)" : rows ? " (조합/원본 미리보기)" : " (안 그려짐)");
-      const cv = document.createElement("canvas");
-      const w = canonicalWidth(ch);   // same fixed rule the canvas uses
-      cv.width = w; cv.height = H;
-      if (rows) {
-        const g = rowsToCells(rows);
-        const ctx = cv.getContext("2d");
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-        for (let y = 0; y < H; y++) for (let x = 0; x < w; x++)
-          if (g[y][x]) ctx.fillRect(x, y, 1, 1);
-      }
-      s.appendChild(cv);
-      s.addEventListener("click", () => loadChar(ch));
-      pal.appendChild(s);
-    }
+    for (const ch of chars)
+      pal.appendChild(swatchFor(ch, paletteSource(ch), !!DATA[ch]));
   }
   function ensureSymbolGroupsDom() {
     const wrap = document.getElementById("paletteSymbolsWrap");
@@ -1012,12 +1033,13 @@
     const meta = document.getElementById("cellPrevMeta");
     const pal = document.getElementById("paletteCells");
     const box = document.getElementById("cellPrevBox");
-    if (!curCell || !ch) {
-      pal.innerHTML = ""; box.hidden = true;
-      meta.textContent = "셀을 고르세요";
-      return;
-    }
-    meta.textContent = "계산 중…";
+    const empty = document.getElementById("cellPrevEmpty");
+    const show = (on, text) => {
+      box.hidden = !on; empty.hidden = on;
+      (on ? meta : empty).textContent = text;
+    };
+    if (!curCell || !ch) { pal.innerHTML = ""; show(false, "셀을 고르세요"); return; }
+    show(true, "계산 중…");
     let out;
     try {
       const res = await fetch("api/cell_preview", {
@@ -1032,37 +1054,20 @@
       if (!res.ok) throw new Error(await res.text().catch(() => res.status));
       out = (await res.json()).chars || [];
     } catch (e) {
-      meta.textContent = "미리보기 실패";
-      pal.innerHTML = ""; box.hidden = true;
+      pal.innerHTML = ""; show(false, "미리보기 실패");
       showToast(`미리보기 실패 · ${String(e.message || e)}`, "error");
       return;
     }
-    box.hidden = false;
     pal.innerHTML = "";
     let composed = 0;
     for (const c of out) {
-      const s = document.createElement("button");
-      s.className = "swatch" + (c.confirmed ? " saved" : "") + (c.rows ? "" : " empty");
-      s.dataset.ch = c.ch;
-      s.title = c.ch + (c.rows ? (c.confirmed ? " (확정본)" : " (조합)")
-                               : " — 다른 셀이 아직 비어 조합 불가. 눌러서 직접 그리면 채워집니다.");
-      const cv = document.createElement("canvas");
-      cv.width = 16; cv.height = H;
-      if (c.rows) {
-        composed++;
-        const ctx = cv.getContext("2d");
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-        for (let y = 0; y < H; y++)
-          for (let x = 0; x < c.rows[y].length; x++)
-            if (c.rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
-      }
-      s.appendChild(cv);
-      // Uncomposable ones are clickable too and matter MOST -- drawing one is
+      if (c.rows) composed++;
+      // Uncomposable ones stay clickable and matter MOST -- drawing one is
       // exactly what fills the empty cell blocking it.
-      s.addEventListener("click", () => loadChar(c.ch));
-      pal.appendChild(s);
+      pal.appendChild(swatchFor(c.ch, c.rows, c.confirmed,
+        " — 다른 셀이 아직 비어 조합 불가. 눌러서 직접 그리면 채워집니다."));
     }
-    meta.textContent = `이 부품을 쓰는 음절 ${out.length}개 · 조합됨 ${composed}`;
+    show(true, `이 부품을 쓰는 음절 ${out.length}개 · 조합됨 ${composed}`);
     markPalette();
   }
 
