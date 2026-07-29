@@ -1008,6 +1008,7 @@
       }
     }
     buildPalette();
+    syncCellsTab();
     pvCachedText = null;
     loadChar(defaultCharFor(weight));
     renderTextPreview();
@@ -1016,15 +1017,26 @@
     b.addEventListener("click", () => switchWeight(b.dataset.weight)));
 
   // ---- palette category tabs ----
+  function selectCat(cat) {
+    document.querySelectorAll(".ptab").forEach(x =>
+      x.setAttribute("aria-selected", x.dataset.cat === cat ? "true" : "false"));
+    document.querySelectorAll(".palette-cat").forEach(el =>
+      el.hidden = el.dataset.cat !== cat);
+    if (cat === "cells" && !CELLS.length) refreshCells();
+  }
   document.querySelectorAll(".ptab").forEach(b =>
-    b.addEventListener("click", () => {
-      const cat = b.dataset.cat;
-      document.querySelectorAll(".ptab").forEach(x =>
-        x.setAttribute("aria-selected", x === b ? "true" : "false"));
-      document.querySelectorAll(".palette-cat").forEach(el =>
-        el.hidden = el.dataset.cat !== cat);
-      if (cat === "cells" && !CELLS.length) refreshCells();
-    }));
+    b.addEventListener("click", () => selectCat(b.dataset.cat)));
+
+  // The component model only describes Light (1px) Hangul, so the 부품 셀 tab
+  // only exists on that weight. Hiding it beats letting it be picked and then
+  // switching the weight out from under the user -- that had the cell's own
+  // loadChar racing the one switchWeight fires for its default character.
+  function syncCellsTab() {
+    const tab = document.querySelector('.ptab[data-cat="cells"]');
+    const on = WEIGHT === "light";
+    tab.hidden = !on;
+    if (!on && tab.getAttribute("aria-selected") === "true") selectCat("hangul");
+  }
 
   // ---- 부품 셀 (11,172자 확장) ----
   // Was its own page/file; the drawing half was a duplicate of this editor's,
@@ -1081,10 +1093,7 @@
     // cell that's already resolved), so fall back to one of its own confirmed
     // syllables -- that both fills the canvas and anchors the preview below.
     const ch = c.suggest || (c.examples || [])[0];
-    if (ch) {
-      if (WEIGHT !== "light") await switchWeight("light");   // cells are Light-only
-      await loadChar(ch);
-    }
+    if (ch) await loadChar(ch);     // always Light here -- see syncCellsTab
     renderCellPreview(ch);
   }
 
@@ -1242,12 +1251,12 @@
 
   // ---- init ----
   buildPalette();
+  syncCellsTab();
   loadChar("A");
   connect().then(() => {
     // /components redirects here with #cells so old bookmarks land on the tab
     // that replaced that page.
-    if (location.hash === "#cells")
-      document.querySelector('.ptab[data-cat="cells"]').click();
+    if (location.hash === "#cells" && WEIGHT === "light") selectCat("cells");
   });
 })();
 </script>
