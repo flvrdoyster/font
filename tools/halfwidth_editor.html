@@ -23,7 +23,10 @@
   .swatch.saved::after { content: ""; position: absolute; top: 2px; right: 2px;
     width: 6px; height: 6px; border-radius: 50%; background: var(--confirm); }
   .swatch.blank-ref { opacity: 0.45; }
-  .swatch canvas { width: 32px; height: 32px; image-rendering: pixelated; pointer-events: none; }
+  /* height forces the scale; width: auto derives from the canvas's own
+     intrinsic 8:16 aspect ratio (halfwidth glyphs are always 8px wide), so
+     the swatch shows the actual proportions instead of a stretched square. */
+  .swatch canvas { height: 32px; width: auto; image-rendering: pixelated; pointer-events: none; }
   .draw-card { flex: 0 0 auto; }
   .grid-outer { position: relative; width: 176px; height: 352px; }
   .grid { position: absolute; inset: 0; display: grid;
