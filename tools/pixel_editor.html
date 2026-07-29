@@ -132,16 +132,20 @@
   .palette { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 5px; }
   .palette-scroll { max-height: 320px; overflow-y: auto; border: 1px solid var(--faint);
     border-radius: 8px; padding: 8px; }
-  .swatch { position: relative; width: 30px; height: 30px; border: 1px solid var(--faint);
-    border-radius: 6px; background: var(--cell-off); cursor: pointer; padding: 0;
-    display: grid; place-items: center; overflow: hidden; }
+  /* --sw-cv is the glyph's on-screen height in CSS px -- 1x/2x/3x means
+     literal 1/2/3 CSS px per glyph px, same convention as the #pv1/2/3
+     drawing-canvas previews. Swatch box just adds a fixed margin around it. */
+  :root { --sw-cv: 32px; }
+  .swatch { position: relative; width: calc(var(--sw-cv) + 6px); height: calc(var(--sw-cv) + 6px);
+    border: 1px solid var(--faint); border-radius: 6px; background: var(--cell-off);
+    cursor: pointer; padding: 0; display: grid; place-items: center; overflow: hidden; }
   .swatch:hover { border-color: var(--accent); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .swatch.saved { border-color: var(--confirm); }
   .swatch.empty { border-style: dashed; opacity: 0.55; }
   .swatch.saved::after { content: ""; position: absolute; top: 2px; right: 2px;
     width: 6px; height: 6px; border-radius: 50%; background: var(--confirm); }
-  .swatch canvas { image-rendering: pixelated; max-width: 24px; max-height: 24px;
+  .swatch canvas { image-rendering: pixelated; max-width: var(--sw-cv); max-height: var(--sw-cv);
     width: auto; height: auto; }
 
   .palette-group + .palette-group { margin-top: 16px; }
@@ -286,7 +290,15 @@
 
   <!-- 2. 글자 불러오기 (팔레트) -->
   <section class="card tier">
-    <p class="label">글자 불러오기</p>
+    <div class="stage-head" style="margin-bottom:10px">
+      <p class="label" style="margin:0">글자 불러오기</p>
+      <span style="flex:1"></span>
+      <div class="seg" role="group" aria-label="팔레트 배율">
+        <button data-swscale="1" aria-pressed="false">1×</button>
+        <button data-swscale="2" aria-pressed="true">2×</button>
+        <button data-swscale="3" aria-pressed="false">3×</button>
+      </div>
+    </div>
     <div class="ptab-bar" role="tablist" aria-label="팔레트 분류">
       <button class="ptab" data-cat="latin" role="tab" aria-selected="true">영숫자</button>
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
@@ -925,6 +937,14 @@
   }
   document.querySelectorAll(".ptab").forEach(b =>
     b.addEventListener("click", () => selectCat(b.dataset.cat)));
+
+  // ---- palette swatch zoom (applies to every category, incl. 부품 셀) ----
+  document.querySelectorAll("[data-swscale]").forEach(b =>
+    b.addEventListener("click", () => {
+      document.documentElement.style.setProperty("--sw-cv", (16 * +b.dataset.swscale) + "px");
+      document.querySelectorAll("[data-swscale]").forEach(x =>
+        x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    }));
 
   // The component model only describes Light (1px) Hangul, so the 부품 셀 tab
   // only exists on that weight. Hiding it beats letting it be picked and then
