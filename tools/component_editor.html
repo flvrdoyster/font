@@ -414,7 +414,7 @@
     document.getElementById("cellName").textContent = c.id;
     setCpLabel(null);
     document.getElementById("cellMeta").textContent =
-      `${c.kind === "cv" ? "초중성" : "종성"} ${c.jamo} · 벌 ${c.beol} · ` +
+      `${c.kind === "LV" ? "초중성" : "종성"} ${c.jamo} · 벌 ${c.beol} · ` +
       `영향 음절 ${c.affects} · 샘플 ${c.samples}` +
       (c.suggest && !c.resolvable
         ? "  ⚠ 다른 셀이 아직 안 풀려서 이 글자만 그려선 안 풀립니다 — 그려두면 나중에 그 셀이 풀릴 때 자동으로 같이 풀립니다."

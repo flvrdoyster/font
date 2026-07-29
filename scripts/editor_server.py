@@ -502,7 +502,7 @@ def _ccomp():
 
 
 def _cell_id(cell):
-    """('jong','ㄽ',('ㅏ',)) <-> 'jong:ㄽ:ㅏ' -- JSON/URL friendly."""
+    """('T','ㄽ',('ㅏ',)) <-> 'T:ㄽ:ㅏ' -- JSON/URL friendly."""
     kind, jamo, beol = cell
     return f"{kind}:{jamo}:{''.join(str(b) for b in beol)}"
 
@@ -527,13 +527,13 @@ def component_cells():
 
     def pick(cell, chars):
         kind = cell[0]
-        simple = _SIMPLE_JONG if kind == "cv" else _SIMPLE_CHO
+        simple = _SIMPLE_JONG if kind == "LV" else _SIMPLE_CHO
         def is_resolvable(ch):
             other = [c for c in cc.cells_for(ch) if c != cell]
             return bool(other) and other[0] in seen
         def rank(ch):
             cho, jung, jong = cl.decompose(ch)
-            free = jong if kind == "cv" else cho
+            free = jong if kind == "LV" else cho
             try:
                 fj_rank = simple.index(free)
             except ValueError:
@@ -556,10 +556,10 @@ def component_cells():
         # Only an EMPTY cell has anything to suggest. Once a cell has samples
         # its shape comes from the syllables that already fed it, and drawing
         # some other syllable can't change it: extraction outside PC-98 works
-        # by subtraction, so with the 종성 cell already known the whole glyph
-        # is charged to the 초중성 cell instead (drawing 맋 to fix jong:ㄳ put
-        # all 43px into cv:ㅁㅏ and left ㄳ untouched). Fixing a filled cell
-        # means editing one of its own `examples` -- the preview palette.
+        # by subtraction, so with the T cell already known the whole glyph
+        # is charged to the LV cell instead (drawing 맋 to fix T:ㄳ put all
+        # 43px into LV:ㅁㅏ and left ㄳ untouched). Fixing a filled cell means
+        # editing one of its own `examples` -- the preview palette.
         suggest, resolvable = (pick(cell, chars) if chars and n == 0
                                else (None, False))
         out.append({
@@ -602,15 +602,15 @@ def cell_preview(ch, rows, cell_id=None, limit=400):
 
     cell_id scopes the result to ONE of ch's two cells. Without it a syllable
     pulls in everything sharing either cell, which reads as over-counting when
-    a cell is under review: opening jong:ㄳ anchors on 넋 and its 초중성 cell
-    drags in 넉/넌/널/넘..., 26 syllables with no ㄳ in them at all.
+    a cell is under review: opening T:ㄳ anchors on 넋 and its LV cell drags
+    in 넉/넌/널/넘..., 26 syllables with no ㄳ in them at all.
 
     Confirmed syllables show their OWN saved pixels, not a recomposition --
     when a cell's samples tie (majority-vote picks one arbitrarily), the
     library component can come from a DIFFERENT confirmed syllable than the
     one being previewed, so recomposing would silently show that other
     syllable's shape instead of the real one (seen with 눰/뛈 sharing a tied
-    jong:ㅁ:(ㅝ,) cell -- 눰's compose() result was actually 뛈's glyph).
+    T:ㅁ:ㅝ cell -- 눰's compose() result was actually 뛈's glyph).
 
     The in-progress drawing is deliberately NOT forced to define its cell here.
     Making it win looks helpful -- edit 넋 and all 280 composed ㄳ syllables
@@ -618,7 +618,7 @@ def cell_preview(ch, rows, cell_id=None, limit=400):
     one sample, and majority vote keeps ignoring it while other confirmed
     syllables agree. This panel is for REVIEW, so it has to show what actually
     ships. Where a component is wrong for a whole class the fix is a finer 벌
-    key (see jong_beol's 가로/세로 split); where it is wrong for one syllable
+    key (see t_beol's 가로/세로 split); where it is wrong for one syllable
     the fix is to draw that syllable, which overrides the composition outright."""
     cc = _ccomp()
     cl = _composer()

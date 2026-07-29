@@ -13,10 +13,12 @@ Why 벌식, measured (see ROADMAP for the full table):
   bitmap-font answer is 벌식: each jamo gets several variants (벌) selected by
   context, which absorbs that interaction.
 
-The cells (leave-one-out 79.4% exact / 1.48px mean at full coverage):
+The cells (leave-one-out 79.4% exact / 1.48px mean at full coverage). Kind
+tags follow Unicode's own L/V/T (초성/중성/종성) names for a Hangul syllable;
+초성+중성 are one fused cell, tagged LV, and 종성 is T:
 
-  초중성 = (초성, 중성, 받침유무)                     19 x 21 x 2 = 798 cells
-  종성   = (종성, 중성), 겹받침 11종만 (종성, 가로/세로) = 16 x 21 + 22 = 358 cells
+  LV (초중성) = (초성, 중성, 받침유무)                     19 x 21 x 2 = 798 cells
+  T  (종성)   = (종성, 중성), 겹받침 11종만 (종성, 가로/세로) = 16 x 21 + 22 = 358 cells
 
 초성 and 중성 are ONE cell, not two. Splitting them was measured to be
 unfounded: a 초성벌 keyed on (중성,받침유무) and a 중성벌 keyed on (받침유무,초성)
@@ -26,7 +28,7 @@ and no corpus evidence can separate them.
 겹받침(두 자음이 겹친 11종: ㄳㄵㄶㄺㄻㄼㄽㄾㄿㅀㅄ)만 중성별 대신 compose_light의
 가로/세로 받침 구분(jong_bt)으로 거칠게 잡는다 -- 231칸이 22칸이 되고 정확도 손실은
 전체 격차의 1/5. 자세한 수치와, 한때 이걸 11칸으로 더 합쳤다가 가로모음 1,045자를
-망가뜨린 경위는 jong_beol()의 주석 참고. ㅆ은 21벌 그대로다.
+망가뜨린 경위는 t_beol()의 주석 참고. ㅆ은 21벌 그대로다.
 
 측정 시 주의: 모음 계열(가로/세로)을 뭉쳐서 평균만 보면 안 된다. 겹받침 표본은
 세로모음에 치우쳐 있어(107 대 53) 가로모음이 망가져도 평균은 멀쩡해 보인다.
@@ -84,7 +86,7 @@ FULL_SPECIMEN = os.path.join(ROOT, "build", "light_hangul_full_specimen.png")
 # A cell is (kind, jamo, 벌). Keep the 벌 functions total (never None) so the
 # whole cell set is enumerable up front -- that is the drawing worklist.
 
-def cv_beol(jong):
+def lv_beol(jong):
     """초중성 shape depends only on whether a batchim squeezes it from below;
     which 초성/중성 pair it is, is already the cell's identity."""
     return (bool(jong),)
@@ -95,7 +97,7 @@ def cv_beol(jong):
 WIDE_JUNG = frozenset("ㅏㅑㅘ")
 
 
-def jong_beol(jong, jung):
+def t_beol(jong, jung):
     """받침 width/position follows the vowel above it. 겹받침 (two stacked
     consonants) instead key on whether the 초중성 above them runs wide, because
     that is what they actually make room for -- a wide 초중성 gets a narrower
@@ -129,9 +131,9 @@ def jong_beol(jong, jung):
 def cells_for(ch):
     """The two (or one) library cells this syllable is built from."""
     cho, jung, jong = cl.decompose(ch)
-    out = [("cv", cho + jung, cv_beol(jong))]
+    out = [("LV", cho + jung, lv_beol(jong))]
     if jong:
-        out.append(("jong", jong, jong_beol(jong, jung)))
+        out.append(("T", jong, t_beol(jong, jung)))
     return out
 
 
@@ -214,26 +216,27 @@ def zone_parts(ch, rows, pc98, cho_ref, corpus):
     159 syllables, which this cut to 84."""
     if pc98(ch) is None:
         return None
-    cv_c, *rest = cells_for(ch)
+    lv_c, *rest = cells_for(ch)
     cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
     if rest and not jz:
         return None
-    parts = {cv_c: on(rows, cz) | on(rows, vz)}            # everything above 받침
+    parts = {lv_c: on(rows, cz) | on(rows, vz)}            # everything above 받침
     if rest:
         parts[rest[0]] = on(rows, jz)
     return parts
 
 
-# A 초중성 sitting above a 받침 never reaches below this row. Anything deeper
-# is batchim ink the cut failed to take out, and unioning a real 종성 on top of
-# it is what produced solid bricks (풜, 뒐). Rejecting those splits outright
-# took filled-3x3 blobs from 159 to 0; hand-drawn glyphs have none in 2,669.
-CV_FLOOR = 9
+# A 초중성(LV) sitting above a 받침 never reaches below this row. Anything
+# deeper is batchim ink the cut failed to take out, and unioning a real 종성(T)
+# on top of it is what produced solid bricks (풜, 뒐). Rejecting those splits
+# outright took filled-3x3 blobs from 159 to 0; hand-drawn glyphs have none in
+# 2,669.
+LV_FLOOR = 9
 
 
-def _cv_polluted(cell, px):
-    return (cell[0] == "cv" and cell[2][0] and px
-            and max(y for y, _ in px) > CV_FLOOR)
+def _lv_polluted(cell, px):
+    return (cell[0] == "LV" and cell[2][0] and px
+            and max(y for y, _ in px) > LV_FLOOR)
 
 
 def observe(corpus, pc98, cho_ref):
@@ -241,7 +244,7 @@ def observe(corpus, pc98, cho_ref):
 
     Measured first: a syllable splits by PC-98's 받침 zone only when PC-98 can
     actually show where the 받침 ends (zone_parts returns None otherwise), and
-    only when the resulting 초중성 respects CV_FLOOR. A syllable with no 받침
+    only when the resulting LV respects LV_FLOOR. A syllable with no 받침
     needs no split, so it always counts.
 
     Everything else -- representative syllables drawn to fill a cell, which are
@@ -252,7 +255,7 @@ def observe(corpus, pc98, cho_ref):
       * subtract only MEASURED components, never another subtraction's output.
         Chaining let one bad split seed the next and manufactured components
         nobody drew.
-      * drop a 초중성 remainder that breaks CV_FLOOR rather than storing it.
+      * drop an LV remainder that breaks LV_FLOOR rather than storing it.
 
     Without the pass a drawn representative could never fill its own cell (맔
     is outside PC-98, so 종성 ㄽ stayed empty however often it was drawn), which
@@ -262,7 +265,7 @@ def observe(corpus, pc98, cho_ref):
     leftover = []
     for ch, rows in corpus.items():
         parts = zone_parts(ch, rows, pc98, cho_ref, corpus)
-        if parts is None or any(_cv_polluted(c, px) for c, px in parts.items()):
+        if parts is None or any(_lv_polluted(c, px) for c, px in parts.items()):
             cells = cells_for(ch)
             if len(cells) == 1:               # no 받침 -> nothing to split off
                 measured[cells[0]][_ink(rows)] += 1
@@ -274,13 +277,13 @@ def observe(corpus, pc98, cho_ref):
 
     seen = {cell: Counter(c) for cell, c in measured.items()}
     for ch, rows in leftover:
-        cv_c, jong_c = cells_for(ch)
+        lv_c, t_c = cells_for(ch)
         px = _ink(rows)
-        for target, other in ((jong_c, cv_c), (cv_c, jong_c)):
+        for target, other in ((t_c, lv_c), (lv_c, t_c)):
             if target in measured or other not in measured:
                 continue
             cand = px - measured[other].most_common(1)[0][0]
-            if _cv_polluted(target, cand):
+            if _lv_polluted(target, cand):
                 continue
             seen.setdefault(target, Counter())[cand] += 1
             break
@@ -339,7 +342,7 @@ def main():
     req = required_cells()
     kinds = Counter(k for k, _, _ in req)
     print(f"library: {len(lib)} cells filled / {len(req)} required "
-          f"(초중성 {kinds['cv']} + 종성 {kinds['jong']}), "
+          f"(초중성 {kinds['LV']} + 종성 {kinds['T']}), "
           f"{len(req - set(lib))} to draw")
 
     if args.validate:
@@ -364,7 +367,7 @@ def main():
             # this syllable contributed. A split it rejected never entered the
             # library, so there is nothing to remove and nothing to test.
             own = zone_parts(ch, rows, pc98, cho_ref, corpus)
-            if own is None or any(_cv_polluted(c, px) for c, px in own.items()):
+            if own is None or any(_lv_polluted(c, px) for c, px in own.items()):
                 skipped += 1
                 continue
             held = {cell: Counter(c) for cell, c in seen.items()}
