@@ -45,7 +45,6 @@
           border: 1px solid var(--grid-line); color: var(--muted); }
   .pill.empty { border-color: var(--warn); color: var(--warn); }
   .pill.warn { border-color: var(--accent); color: var(--accent); }
-  .pill.ok { border-color: var(--confirm); color: var(--confirm); }
   /* Fixed width, not flex:0 0 auto -- an auto-basis flex item sizes to its
      widest unbroken content (min-width:auto default), so the long "순서 필요"
      warning line in #cellMeta forced the whole card wide instead of wrapping. */
@@ -356,20 +355,17 @@
     }));
 
   // ---- list ----
-  function status(c) {
-    // No "저신뢰" tier: sample disagreement turned out to measure extraction
-    // mechanics, not glyph quality. Of 184 flagged cells, 49% had source
-    // glyphs that were pixel-identical where the extracts disagreed (the 받침
-    // zone just caught different pixels), 19% were subtraction-path artifacts,
-    // and the rest differed by 1-3px -- deliberate optical corrections, not
-    // errors. Nothing actionable was left, so the tier is gone.
-    return c.samples === 0 ? ["empty", "그릴 것"] : ["ok", "확정"];
-  }
   // 가나다순: 초중성 먼저, 그 안에서 자모순. Plain codepoint order on the
   // compatibility-jamo block already IS the standard order -- 초성/중성 never
   // include clusters, and for 종성 the block interleaves them exactly where
   // 가나다 wants them (ㄱㄲㄳㄴㄵㄶㄷㄹㄺ...). No collation table needed.
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  // 상태 열은 셀 하나당 배지 하나뿐이다 -- 샘플이 없으면 "그릴 것", 있으면
+  // 샘플 개수. "확정" 배지는 여기 없었다: 이 개수는 서로 다른 확정 음절에서
+  // 다수결로 뽑힌 값일 뿐이라 "확정본"(손으로 그려 저장한 음절, 스와치/참고
+  // 칸이 쓰는 뜻)과 다른 개념인데 같은 단어를 썼었다. "저신뢰" 등급도 이유가
+  // 같아서 없앴다 -- 샘플 불일치는 추출 방식의 잡음이지 품질 신호가 아니었다
+  // (184개 중 실제로 고칠 게 하나도 없었음, 커밋 e0afc93 참고).
   function renderList() {
     const shown = CELLS.filter(c => !todoOnly || c.samples === 0)
                        .sort((a, b) => cmp(a.kind, b.kind)
@@ -377,16 +373,16 @@
                                     || cmp(a.beol, b.beol));
     rowsEl.innerHTML = "";
     for (const c of shown) {          // no cap -- the list is the review queue
-      const [k, label] = status(c);
+      const stateCell = c.samples === 0
+        ? `<span class="pill empty">그릴 것</span>`
+        : `<span class="pill">샘플 ${c.samples}</span>`;
       const tr = document.createElement("tr");
       tr.className = "row"; tr.dataset.id = c.id;
       tr.setAttribute("aria-selected", cur && cur.id === c.id ? "true" : "false");
       tr.innerHTML =
         `<td><span class="jamo">${c.jamo}</span> <span class="pill">${c.kind}</span></td>` +
         `<td>${c.beol}</td>` +
-        `<td><span class="pill ${k}">${label}</span>` +
-        (c.samples ? ` <span class="pill">샘플 ${c.samples}</span>` : "") +
-        `</td><td>${c.affects}</td>` +
+        `<td>${stateCell}</td><td>${c.affects}</td>` +
         `<td class="jamo">${c.suggest || "—"}` +
         (c.suggest && !c.resolvable
           ? ` <span class="pill warn" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>`
