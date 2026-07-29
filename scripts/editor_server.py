@@ -926,10 +926,11 @@ def _ensure_venv():
         os.execv(venv_py, [venv_py] + sys.argv)
 
 
+# 부품 셀 is a palette tab of the main editor, not a page -- listing it
+# separately would offer the same page twice.
 PAGES = [
     ("메인 에디터", "/"),
     ("반각 한글 에디터", "/halfwidth"),
-    ("메인 에디터 · 부품 셀 탭", "/components"),
 ]
 
 
@@ -944,8 +945,8 @@ def main():
     url = f"http://localhost:{args.port}/"
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
     print(f"  editing tools/glyphs_bold.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
+    print(f"  부품 셀: 메인 에디터의 팔레트 탭  ·  11,172자 확장용 (docs/ROADMAP.md)")
     print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
-    print(f"  부품 셀 에디터:  {url}components  ·  11,172자 확장용 (docs/ROADMAP.md)")
 
     # Serve in the background so the terminal prompt below can run while the
     # server is already up -- opening a browser before serve_forever() starts
