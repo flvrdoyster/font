@@ -75,12 +75,15 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 컴파일한다. 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)만 열어도
 복사 방식으로 쓸 수 있다.
 
-서버는 시작할 때 어느 페이지를 열지 묻는다. `/components`는 Regular를 11,172자로
-넓히기 위한 **부품 셀 에디터**다 — 셀을 고르고 대표 음절을 그리면 부품이 자동
-추출된다. 진행 상황은 CLI로도 볼 수 있다:
+Regular를 11,172자로 넓히는 작업은 팔레트의 **부품 셀** 탭에서 한다 — 셀을 고르면
+그 셀의 대표 음절이 캔버스로 올라오고, 그려서 저장하면 부품이 자동 추출된다
+(`/components`로 들어가도 이 탭으로 온다). 진행 상황은 CLI로도 볼 수 있다:
 
 ```bash
 .venv/bin/python scripts/compose_components.py --coverage   # 조합 가능률
-.venv/bin/python scripts/compose_components.py --missing    # 그려야 할 셀, 영향 순
+.venv/bin/python scripts/compose_components.py --missing    # 그려야 할 셀
 .venv/bin/python scripts/compose_components.py --build      # 검토용 11,172자 출력
 ```
+
+반각 한글은 별도 도구(`/halfwidth`)를 쓴다. 서버는 시작할 때 어느 페이지를 열지
+묻는다.

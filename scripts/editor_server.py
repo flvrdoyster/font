@@ -102,7 +102,6 @@ from urllib.parse import parse_qs, urlparse
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
-COMPONENT_EDITOR = os.path.join(ROOT, "tools", "component_editor.html")
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
@@ -119,12 +118,6 @@ HALFWIDTH_PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<title>반각 한글 에디터</title></head><body>"
-)
-
-COMPONENT_PAGE_HEAD = (
-    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<title>부품 셀 에디터</title></head><body>"
 )
 
 
@@ -973,9 +966,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"chars": kana_chars()},
                                               ensure_ascii=False))
         if parsed.path in ("/components", "/components.html", "/components/"):
-            with open(COMPONENT_EDITOR, encoding="utf-8") as f:
-                page = COMPONENT_PAGE_HEAD + f.read() + PAGE_TAIL
-            return self._send(200, page, "text/html; charset=utf-8")
+            # The component-cell editor is now the main editor's 부품 셀 palette
+            # tab -- its drawing half was a duplicate of that editor's. Kept as
+            # a redirect so existing bookmarks and the startup prompt still work.
+            self.send_response(302)
+            self.send_header("Location", "/#cells")
+            self.end_headers()
+            return
         if parsed.path == "/api/cells":
             return self._send(200, json.dumps({"cells": component_cells()},
                                               ensure_ascii=False))
@@ -1130,7 +1127,7 @@ def _ensure_venv():
 PAGES = [
     ("메인 에디터", "/"),
     ("반각 한글 에디터", "/halfwidth"),
-    ("부품 셀 에디터", "/components"),
+    ("메인 에디터 · 부품 셀 탭", "/components"),
 ]
 
 

@@ -3,7 +3,7 @@
   :root {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
+    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f; --warn: #b3392c;
     --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
@@ -11,18 +11,18 @@
     :root {
       --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
       --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-      --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
+      --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78; --warn: #e0705f;
     }
   }
   :root[data-theme="light"] {
     --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f;
+    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f; --warn: #b3392c;
   }
   :root[data-theme="dark"] {
     --ground: #14161b; --panel: #1d2027; --ink: #e9ecf2; --muted: #99a0af;
     --faint: #2b2f38; --cell-off: #23262e; --accent: #e2ab52; --accent-soft: #3a2f1c;
-    --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78;
+    --guide: #62a6d6; --guide2: #c68ce8; --grid-line: #333844; --focus: #6aa9f0; --confirm: #4fbf78; --warn: #e0705f;
   }
 
   * { box-sizing: border-box; }
@@ -147,6 +147,27 @@
   .palette-group + .palette-group { margin-top: 16px; }
   .sublabel { font-size: 11px; color: var(--muted); margin: 0 0 8px; letter-spacing: 0.03em; }
   .hint-inline { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+
+  /* 부품 셀 탭 */
+  .cellbar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ctoggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+  .ctoggle input { accent-color: var(--accent); }
+  .cell-split { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .cell-list { flex: 1 1 460px; min-width: 340px; max-height: 320px; overflow-y: auto;
+    border: 1px solid var(--faint); border-radius: 8px; }
+  .cell-affected { flex: 1 1 300px; min-width: 260px; margin-top: 0 !important; }
+  .celltable { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .celltable th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px;
+    padding: 5px 8px; position: sticky; top: 0; background: var(--panel); }
+  .celltable td { padding: 4px 8px; border-top: 1px solid var(--faint); }
+  .celltable tr.row { cursor: pointer; }
+  .celltable tr.row:hover td { background: var(--cell-off); }
+  .celltable tr.row[aria-selected="true"] td { background: var(--accent-soft); }
+  .celltable .jamo { font-size: 15px; font-weight: 600; }
+  .pill { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 99px;
+    border: 1px solid var(--grid-line); color: var(--muted); }
+  .pill.empty { border-color: var(--warn); color: var(--warn); }
+  .pill.warn { border-color: var(--accent); color: var(--accent); }
 
   textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.45;
     background: var(--ground); color: var(--ink); border: 1px solid var(--grid-line);
@@ -290,6 +311,7 @@
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
       <button class="ptab" data-cat="kana" role="tab" aria-selected="false">가나</button>
       <button class="ptab" data-cat="symbols" role="tab" aria-selected="false">기호</button>
+      <button class="ptab" data-cat="cells" role="tab" aria-selected="false">부품 셀</button>
     </div>
     <div class="palette-cat" data-cat="latin">
       <div class="palette-group">
@@ -315,6 +337,26 @@
     </div>
     <div class="palette-cat" data-cat="symbols" hidden>
       <div class="palette-scroll" id="paletteSymbolsWrap"></div>
+    </div>
+    <!-- 부품 셀: 11,172자 확장용. 셀을 고르면 그 셀의 대표 음절이 위 캔버스로
+         올라오고, 저장하면 부품이 자동 추출된다. 자세한 건 docs/ROADMAP.md. -->
+    <div class="palette-cat" data-cat="cells" hidden>
+      <div class="cellbar">
+        <label class="ctoggle"><input type="checkbox" id="cellTodoOnly"> 그릴 셀만</label>
+        <span class="cp" id="cellCount"></span>
+      </div>
+      <div class="cell-split">
+        <div class="cell-list">
+          <table class="celltable">
+            <thead><tr><th>셀</th><th>벌</th><th>상태</th><th>영향</th><th>제안</th></tr></thead>
+            <tbody id="cellRows"></tbody>
+          </table>
+        </div>
+        <div class="palette-group cell-affected">
+          <p class="sublabel" id="cellPrevMeta">셀을 고르세요</p>
+          <div class="palette-scroll"><div class="palette" id="paletteCells"></div></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -555,11 +597,28 @@
     }
     if (ch === curChar) drawGhost();
   }
+  let boldCache = {};
+  async function fetchBold(ch) {
+    try {
+      const res = await fetch("api/text?weight=regular&s=" + encodeURIComponent(ch), { cache: "no-store" });
+      const j = await res.json();
+      boldCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
+    } catch (e) {
+      boldCache[ch] = null;
+    }
+    if (ch === curChar) drawGhost();
+  }
   function drawGhost() {
     let rows = null;
     if (ghostOn && WEIGHT === "regular" && isKana(curChar)) {
       if (curChar in lightCache) rows = lightCache[curChar];
       else fetchLight(curChar);   // redraws when it lands
+    } else if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
+      // Bold on purpose, unthinned: it shows the original skeleton as drawn,
+      // and deciding which stroke survives the 1px reduction is a visual call
+      // to make against it, not something to pre-apply.
+      if (curChar in boldCache) rows = boldCache[curChar];
+      else fetchBold(curChar);
     }
     paintGhost(document.getElementById("ghost"), rows, "--ink");
     drawSymGhost();
@@ -964,7 +1023,123 @@
         x.setAttribute("aria-selected", x === b ? "true" : "false"));
       document.querySelectorAll(".palette-cat").forEach(el =>
         el.hidden = el.dataset.cat !== cat);
+      if (cat === "cells" && !CELLS.length) refreshCells();
     }));
+
+  // ---- 부품 셀 (11,172자 확장) ----
+  // Was its own page/file; the drawing half was a duplicate of this editor's,
+  // so the same fix had to be made twice every time. Only the "what do I draw
+  // next" half is specific, and that is all this section is: pick a cell, and
+  // its representative syllable loads into the canvas above like any other
+  // palette entry. Saving goes through the normal save path.
+  let CELLS = [], curCell = null, cellTodoOnly = false;
+  const cellRowsEl = document.getElementById("cellRows");
+  const cmpJ = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+  function renderCellList() {
+    // 가나다순: plain codepoint order on the compatibility-jamo block already
+    // IS the standard order -- 초성/중성 never include clusters, and for 종성
+    // the block interleaves them exactly where 가나다 wants them.
+    const shown = CELLS.filter(c => !cellTodoOnly || c.samples === 0)
+      .sort((a, b) => cmpJ(a.kind, b.kind) || cmpJ(a.jamo, b.jamo) || cmpJ(a.beol, b.beol));
+    cellRowsEl.innerHTML = "";
+    for (const c of shown) {
+      // One badge per row: 그릴 것 when empty, sample count when filled. The
+      // count is NOT a confidence score -- how much samples disagree measures
+      // the 받침 zone cut and the user's optical corrections, not quality.
+      const state = c.samples === 0
+        ? `<span class="pill empty">그릴 것</span>`
+        : `<span class="pill">샘플 ${c.samples}</span>`;
+      const tr = document.createElement("tr");
+      tr.className = "row";
+      tr.setAttribute("aria-selected", curCell && curCell.id === c.id ? "true" : "false");
+      tr.innerHTML =
+        `<td><span class="jamo">${c.jamo}</span> <span class="pill">${c.kind}</span></td>` +
+        `<td>${c.beol}</td><td>${state}</td><td>${c.affects}</td>` +
+        `<td class="jamo">${c.suggest || (c.stuck ? "" : "—")}` +
+        (c.suggest && !c.resolvable
+          ? ` <span class="pill warn" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>` : "") +
+        (c.stuck
+          ? ` <span class="pill warn" title="이 셀을 쓰는 음절이 전부 이미 확정본인데도 셀이 비어 있습니다. 새로 그려서 해결되지 않습니다.">추출 안 됨</span>` : "") +
+        `</td>`;
+      tr.addEventListener("click", () => selectCell(c));
+      cellRowsEl.appendChild(tr);
+    }
+    const todo = CELLS.filter(c => c.samples === 0).length;
+    document.getElementById("cellCount").textContent =
+      `${shown.length}셀` + (cellTodoOnly || !todo ? "" : ` · 그릴 것 ${todo}`);
+  }
+  document.getElementById("cellTodoOnly").addEventListener("change", e => {
+    cellTodoOnly = e.target.checked;
+    renderCellList();
+  });
+
+  async function selectCell(c) {
+    curCell = c;
+    renderCellList();
+    // A filled cell has no suggestion (drawing a new syllable can't move a
+    // cell that's already resolved), so fall back to one of its own confirmed
+    // syllables -- that both fills the canvas and anchors the preview below.
+    const ch = c.suggest || (c.examples || [])[0];
+    if (ch) {
+      if (WEIGHT !== "light") await switchWeight("light");   // cells are Light-only
+      await loadChar(ch);
+    }
+    renderCellPreview(ch);
+  }
+
+  async function renderCellPreview(ch) {
+    const meta = document.getElementById("cellPrevMeta");
+    const pal = document.getElementById("paletteCells");
+    if (!curCell || !ch) { pal.innerHTML = ""; meta.textContent = "셀을 고르세요"; return; }
+    meta.textContent = "계산 중…";
+    let out;
+    try {
+      const res = await fetch("api/cell_preview", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        // scope to the selected cell, or the anchor's OTHER cell drags in
+        // syllables that don't use this component at all
+        body: JSON.stringify({ ch, rows: cellsToRows(), cell: curCell.id }),
+      });
+      out = (await res.json()).chars || [];
+    } catch (e) { meta.textContent = "미리보기 실패"; return; }
+    pal.innerHTML = "";
+    let composed = 0;
+    for (const c of out) {
+      const s = document.createElement("button");
+      s.className = "swatch" + (c.confirmed ? " saved" : "") + (c.rows ? "" : " empty");
+      s.dataset.ch = c.ch;
+      s.title = c.ch + (c.rows ? (c.confirmed ? " (확정본)" : " (조합)")
+                               : " — 다른 셀이 아직 비어 조합 불가. 눌러서 직접 그리면 채워집니다.");
+      const cv = document.createElement("canvas");
+      cv.width = 16; cv.height = H;
+      if (c.rows) {
+        composed++;
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+        for (let y = 0; y < H; y++)
+          for (let x = 0; x < c.rows[y].length; x++)
+            if (c.rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
+      }
+      s.appendChild(cv);
+      // Uncomposable ones are clickable too and matter MOST -- drawing one is
+      // exactly what fills the empty cell blocking it.
+      s.addEventListener("click", () => loadChar(c.ch));
+      pal.appendChild(s);
+    }
+    meta.textContent = `이 부품을 쓰는 음절 ${out.length}개 · 조합됨 ${composed}`;
+    markPalette();
+  }
+
+  async function refreshCells() {
+    if (!SERVER) return;
+    try {
+      const j = await (await fetch("api/cells", { cache: "no-store" })).json();
+      CELLS = j.cells || [];
+    } catch (e) { return; }
+    if (curCell) curCell = CELLS.find(c => c.id === curCell.id) || curCell;
+    renderCellList();
+  }
 
   // ---- toast ----
   const toastsEl = document.getElementById("toasts");
@@ -999,6 +1174,12 @@
     buildPalette(); markPalette();
     pvCachedText = null;
     renderTextPreview();
+    // Cell status is derived from the confirmed corpus, so a save can fill or
+    // change a cell -- recompute rather than leaving a stale worklist.
+    if (CELLS.length) {
+      await refreshCells();
+      if (curCell) renderCellPreview(curChar);
+    }
     return j;
   }
 
@@ -1062,6 +1243,11 @@
   // ---- init ----
   buildPalette();
   loadChar("A");
-  connect();
+  connect().then(() => {
+    // /components redirects here with #cells so old bookmarks land on the tab
+    // that replaced that page.
+    if (location.hash === "#cells")
+      document.querySelector('.ptab[data-cat="cells"]').click();
+  });
 })();
 </script>
