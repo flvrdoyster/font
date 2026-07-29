@@ -1,29 +1,13 @@
+<link rel="stylesheet" href="editor.css">
 <style>
-  /* Light only -- see pixel_editor.html for why. */
+  /* Page-specific only -- shared colour tokens, .app/.topbar/.card/.btn/
+     .status/.toast live in editor.css (see that file's header comment).
+     --ref/--ref-soft/--ref2 stay here: the reference-overlay colours are
+     unique to this editor. */
   :root {
-    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
-    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
-    --confirm: #2e8b4f;
-    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color-scheme: light;
+    --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--ground);
-         line-height: 1.5; -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
 
-  /* Same compact single-row toolbar as the main editor: identity + status,
-     no explanatory paragraph (goes stale, and the main editor dropped its
-     equivalent for the same reason). */
-  .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-            margin-bottom: 14px; }
-  .topbar h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; font-weight: 650;
-               color: var(--muted); }
-
-  .card { background: var(--panel); border: 1px solid var(--faint);
-          border-radius: 12px; padding: 14px; }
   .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   .palette-card { flex: 1 1 260px; min-width: 240px; max-height: 640px;
                   overflow-y: auto; }
@@ -52,16 +36,7 @@
   .ghost-ref { position: absolute; inset: 0; pointer-events: none;
                image-rendering: pixelated; opacity: 0.55; }
   .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-width: 176px; }
-  .btn { font: inherit; font-size: 12px; padding: 6px 11px; cursor: pointer;
-         border: 1px solid var(--grid-line); border-radius: 7px; background: var(--panel);
-         color: var(--ink); }
-  .btn:hover { border-color: var(--accent); }
-  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .btn.primary:hover { filter: brightness(1.06); }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-  .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
-             border-radius: 20px; white-space: nowrap;
-             background: var(--faint); color: var(--muted); }
   .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
   .toggle input { accent-color: var(--accent); }
   .cur-label { font-size: 13px; font-weight: 600; margin-top: 14px; }
@@ -69,23 +44,9 @@
   .legend { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
                  margin-right: 4px; }
-  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50;
-            display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-  .toast { pointer-events: auto; display: flex; align-items: center; gap: 8px;
-           font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
-           color: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-           opacity: 0; transform: translateY(6px); transition: opacity 0.18s ease, transform 0.18s ease; }
-  .toast.show { opacity: 1; transform: translateY(0); }
-  .toast[data-kind="error"] { background: #b5432f; color: #fff; }
-  .toast[data-kind="success"] .dot { background: #59c37a; }
-  .toast .dot { width: 7px; height: 7px; border-radius: 50%; background: #8fa0b8; flex: none; }
-
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; }
-  }
 </style>
 
-<div class="wrap">
+<div class="app">
   <header class="topbar">
     <h1>반각(半角)</h1>
     <span class="status" id="status"></span>

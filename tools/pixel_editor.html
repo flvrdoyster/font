@@ -1,29 +1,11 @@
 <title>도깨비DNR 픽셀 에디터</title>
+<link rel="stylesheet" href="editor.css">
 <style>
-  /* Light only, on purpose: this tool is a 1-bit pixel editor -- the canvas is
-     literal black ink on white, and every overlay/guide colour is tuned to
-     read against that. A dark theme inverts the one thing that must not be
-     ambiguous (is this pixel on?), so it was never worth the second palette. */
+  /* Page-specific only -- shared colour tokens, .app/.topbar/.card/.btn/
+     .status/.toast live in editor.css (see that file's header comment). */
   :root {
-    --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
-    --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
-    --guide: #2f78ab; --guide2: #9333c9; --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f; --warn: #b3392c;
-    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color-scheme: light;
+    --guide: #2f78ab; --guide2: #9333c9;
   }
-
-  * { box-sizing: border-box; }
-  .app {
-    font-family: var(--sans); color: var(--ink); background: var(--ground);
-    min-height: 100%; padding: 20px; line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  .topbar { max-width: 1080px; margin: 0 auto 14px; display: flex;
-    align-items: center; gap: 12px; flex-wrap: wrap; }
-  .topbar h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; font-weight: 650;
-    color: var(--muted); }
-  .topbar .btn { flex: none; }
 
   .wtab { font: inherit; font-size: 13px; font-weight: 600; padding: 5px 12px;
     border: 0; background: var(--panel); color: var(--muted); cursor: pointer; }
@@ -37,12 +19,8 @@
   .ptab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft);
     color: var(--ink); }
 
-  .tier { max-width: 1080px; margin: 16px auto 0; }
+  .tier { max-width: var(--page-max); margin: 16px auto 0; }
   .tier:first-of-type { margin-top: 0; }
-
-  .card { background: var(--panel); border: 1px solid var(--faint);
-    border-radius: 12px; padding: 16px; }
-  .card + .card { margin-top: 16px; }
 
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--muted); font-weight: 600; margin: 0 0 8px; }
@@ -102,11 +80,6 @@
   .tools .btn[data-act$="ft"], .tools .btn[data-act$="ght"],
   .tools .btn[data-act="up"], .tools .btn[data-act="down"] { min-width: 34px; }
   .tool-gap { width: 10px; }
-  .btn { font: inherit; font-size: 12px; padding: 6px 11px; cursor: pointer;
-    border: 1px solid var(--grid-line); border-radius: 7px; background: var(--panel);
-    color: var(--ink); }
-  .btn:hover { border-color: var(--accent); }
-  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
   /* Controls and the 1x/2x/3x proof sit side by side so the column beside a
      fixed-size canvas isn't mostly empty; stacks under it when narrow. */
@@ -172,33 +145,6 @@
   .pill.empty { border-color: var(--warn); color: var(--warn); }
   .pill.warn { border-color: var(--accent); color: var(--accent); }
 
-  textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.45;
-    background: var(--ground); color: var(--ink); border: 1px solid var(--grid-line);
-    border-radius: 8px; padding: 10px; resize: vertical; }
-  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .btn.primary:hover { filter: brightness(1.06); }
-  .btn[hidden] { display: none; }
-
-  .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
-    border-radius: 20px; white-space: nowrap;
-    background: var(--faint); color: var(--muted); }
-  .status[data-on="true"] { background: var(--accent-soft); color: var(--accent); }
-  /* toast */
-  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50;
-    display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-  .toast { pointer-events: auto; display: flex; align-items: center; gap: 8px;
-    font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
-    color: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-    opacity: 0; transform: translateY(6px); transition: opacity 0.18s ease, transform 0.18s ease; }
-  .toast.show { opacity: 1; transform: translateY(0); }
-  .toast[data-kind="error"] { background: #b5432f; color: #fff; }
-  .toast[data-kind="success"] .dot { background: #59c37a; }
-  .toast .dot { width: 7px; height: 7px; border-radius: 50%; background: #8fa0b8; flex: none; }
-
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; }
-    .toast { transition: none; }
-  }
 </style>
 
 <div class="app">

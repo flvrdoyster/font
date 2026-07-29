@@ -5,6 +5,10 @@
 Serves tools/pixel_editor.html at http://localhost:PORT/ and exposes a small
 API so the editor can load and SAVE glyphs, per weight (Regular / Light):
 
+  GET  /editor.css        -> tools/editor.css, the shared visual foundation
+                             (colour tokens, page shell, card/button/status
+                             pill/toast) both this page and /halfwidth link
+                             to. Page-specific CSS stays inline in each file.
   GET  /api/glyphs?weight=regular|light
                           -> current glyphs_<weight>.json { "A": [rows], ... }
   POST /api/glyphs?weight=regular|light
@@ -95,17 +99,20 @@ GLYPHS_FILES = {
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
 }
 
+EDITOR_CSS = os.path.join(ROOT, "tools", "editor.css")
+_CSS_LINK = "<link rel=\"stylesheet\" href=\"editor.css\">"
+
 PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<title>도깨비DNR 픽셀 에디터</title></head><body>"
+    "<title>도깨비DNR 픽셀 에디터</title>" + _CSS_LINK + "</head><body>"
 )
 PAGE_TAIL = "</body></html>"
 
 HALFWIDTH_PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<title>반각 한글 에디터</title></head><body>"
+    "<title>반각 한글 에디터</title>" + _CSS_LINK + "</head><body>"
 )
 
 
@@ -762,6 +769,9 @@ class Handler(BaseHTTPRequestHandler):
             with open(EDITOR, encoding="utf-8") as f:
                 page = PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path == "/editor.css":
+            with open(EDITOR_CSS, encoding="utf-8") as f:
+                return self._send(200, f.read(), "text/css; charset=utf-8")
         if parsed.path == "/api/glyphs":
             weight = self._weight_qs(qs)
             return self._send(200, json.dumps(read_glyphs(weight), ensure_ascii=False))
