@@ -948,18 +948,24 @@
   const cmpJ = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
   function renderCellList() {
+    // 그릴 셀만 필터는 실제로 그려서 풀 수 있는 것만 남긴다. stuck은 samples
+    // === 0이지만 후보 전부가 이미 확정본이라 -- 다시 그려도 안 바뀌고 추출
+    // 가드 문제라 필터에도, "그릴 것" 집계에도 안 들어간다.
+    const todoable = c => c.samples === 0 && !c.stuck;
     // 가나다순: plain codepoint order on the compatibility-jamo block already
     // IS the standard order -- 초성/중성 never include clusters, and for 종성
     // the block interleaves them exactly where 가나다 wants them.
-    const shown = CELLS.filter(c => !cellTodoOnly || c.samples === 0)
+    const shown = CELLS.filter(c => !cellTodoOnly || todoable(c))
       .sort((a, b) => cmpJ(a.kind, b.kind) || cmpJ(a.jamo, b.jamo) || cmpJ(a.beol, b.beol));
     cellRowsEl.innerHTML = "";
     for (const c of shown) {
-      // One badge per row: 그릴 것 when empty, sample count when filled. The
-      // count is NOT a confidence score -- how much samples disagree measures
-      // the 받침 zone cut and the user's optical corrections, not quality.
-      const state = c.samples === 0
-        ? `<span class="pill empty">그릴 것</span>`
+      // One badge per row: 그릴 것 when actually drawable-and-empty, 추출 안 됨
+      // when stuck, sample count otherwise. The count is NOT a confidence
+      // score -- how much samples disagree measures the 받침 zone cut and the
+      // user's optical corrections, not quality.
+      const state = c.stuck
+        ? `<span class="pill warn" title="이 셀을 쓰는 음절이 전부 이미 확정본인데도 셀이 비어 있습니다. 새로 그려서 해결되지 않습니다.">추출 안 됨</span>`
+        : todoable(c) ? `<span class="pill empty">그릴 것</span>`
         : `<span class="pill">샘플 ${c.samples}</span>`;
       const tr = document.createElement("tr");
       tr.className = "row";
@@ -967,18 +973,19 @@
       tr.innerHTML =
         `<td><span class="jamo">${c.jamo}</span> <span class="pill">${c.kind}</span></td>` +
         `<td>${c.beol}</td><td>${state}</td><td>${c.affects}</td>` +
-        `<td class="jamo">${c.suggest || (c.stuck ? "" : "—")}` +
+        `<td class="jamo">${c.suggest || "—"}` +
         (c.suggest && !c.resolvable
           ? ` <span class="pill warn" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>` : "") +
-        (c.stuck
-          ? ` <span class="pill warn" title="이 셀을 쓰는 음절이 전부 이미 확정본인데도 셀이 비어 있습니다. 새로 그려서 해결되지 않습니다.">추출 안 됨</span>` : "") +
         `</td>`;
       tr.addEventListener("click", () => selectCell(c));
       cellRowsEl.appendChild(tr);
     }
-    const todo = CELLS.filter(c => c.samples === 0).length;
+    const todo = CELLS.filter(todoable).length;
+    const stuck = CELLS.filter(c => c.stuck).length;
     document.getElementById("cellCount").textContent =
-      `${shown.length}셀` + (cellTodoOnly || !todo ? "" : ` · 그릴 것 ${todo}`);
+      `${shown.length}셀` +
+      (cellTodoOnly || !todo ? "" : ` · 그릴 것 ${todo}`) +
+      (cellTodoOnly || !stuck ? "" : ` · 추출 안 됨 ${stuck}`);
   }
   document.getElementById("cellTodoOnly").addEventListener("change", e => {
     cellTodoOnly = e.target.checked;
