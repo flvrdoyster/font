@@ -383,9 +383,12 @@
         `<td><span class="jamo">${c.jamo}</span> <span class="pill">${c.kind}</span></td>` +
         `<td>${c.beol}</td>` +
         `<td>${stateCell}</td><td>${c.affects}</td>` +
-        `<td class="jamo">${c.suggest || "—"}` +
+        `<td class="jamo">${c.suggest || (c.stuck ? "" : "—")}` +
         (c.suggest && !c.resolvable
           ? ` <span class="pill warn" title="다른 셀이 먼저 안 풀려서, 이 글자만 그리면 이 셀도 계속 빈 채로 남습니다.">순서 필요</span>`
+          : "") +
+        (c.stuck
+          ? ` <span class="pill warn" title="이 셀을 쓰는 음절은 전부 이미 확정본으로 있는데도 셀이 비어 있습니다. 새로 그려서 해결되지 않습니다 -- 예시(examples)에서 그중 하나를 열어 추출 자체를 살펴보세요.">추출 안 됨</span>`
           : "") +
         `</td>`;
       tr.addEventListener("click", () => selectCell(c));

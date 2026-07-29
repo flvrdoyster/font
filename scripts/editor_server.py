@@ -528,6 +528,13 @@ def component_cells():
     def pick(cell, chars):
         kind = cell[0]
         simple = _SIMPLE_JONG if kind == "LV" else _SIMPLE_CHO
+        # Never suggest a syllable that's already confirmed. A cell can be
+        # empty even though every candidate using it is drawn: extraction
+        # rejected the split (PC-98 doesn't cover it and the subtraction
+        # guard didn't trust the result), not because nobody drew anything --
+        # see 뤔/LV:ㄹㅝ. Redrawing it is a no-op; only the guard can fix that,
+        # so there is nothing left to suggest.
+        undrawn = [ch for ch in chars if ch not in corpus]
         def is_resolvable(ch):
             other = [c for c in cc.cells_for(ch) if c != cell]
             return bool(other) and other[0] in seen
@@ -545,7 +552,9 @@ def component_cells():
             # what happened with 먝/몍 -- both landed on an unresolvable pair).
             # Rank resolvable candidates first; simplicity only breaks ties.
             return (0 if is_resolvable(ch) else 1, fj_rank)
-        best = sorted(chars, key=rank)[0]
+        if not undrawn:
+            return None, False
+        best = sorted(undrawn, key=rank)[0]
         return best, is_resolvable(best)
 
     out = []
@@ -578,6 +587,10 @@ def component_cells():
             # `suggest` alone won't resolve this one; something else needs
             # filling first (see pick()'s docstring-comment above).
             "resolvable": resolvable,
+            # True when the cell is empty AND every syllable that could fill
+            # it is already confirmed -- drawing cannot fix this one, only a
+            # change to the extraction guard can (see pick()'s 뤔 comment).
+            "stuck": n == 0 and bool(chars) and suggest is None,
             # Confirmed syllables using this cell -- the palette anchor and the
             # only way to change an already-filled cell. PC-98-covered ones
             # first: those are cut by the 받침 zone and so feed this cell
