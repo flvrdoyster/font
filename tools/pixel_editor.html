@@ -177,12 +177,6 @@
   .btn.primary:hover { filter: brightness(1.06); }
   .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
 
-  /* text preview */
-  #previewText { width: 100%; text-align: left; }
-  .pvscroll { overflow-x: auto; margin-top: 10px; background: var(--cell-off);
-    border: 1px solid var(--faint); border-radius: 8px; padding: 8px; }
-  .pvscroll canvas { image-rendering: pixelated; display: block; }
-
   .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
     border-radius: 20px; margin-left: 6px; white-space: nowrap;
     background: var(--faint); color: var(--muted); }
@@ -289,21 +283,8 @@
     </div>
   </section>
 
-  <!-- 2. 텍스트 미리보기 -->
-  <section class="card tier">
-    <p class="label">텍스트 미리보기</p>
-    <input type="text" id="previewText"
-      value="1990년대 PC-98 게임의 ひらがな와 カタカナ를 16×16 도트로 되살린 도깨비DNR 고딕 v0.3, 다람쥐 헌 쳇바퀴에 타고파"
-      spellcheck="false" autocomplete="off">
-    <div class="seg" role="group" aria-label="미리보기 배율" style="margin-top:8px">
-      <button data-pvscale="2" aria-pressed="false">2×</button>
-      <button data-pvscale="3" aria-pressed="true">3×</button>
-      <button data-pvscale="4" aria-pressed="false">4×</button>
-    </div>
-    <div class="pvscroll"><canvas id="pvText"></canvas></div>
-  </section>
 
-  <!-- 3. 글자 불러오기 (팔레트) -->
+  <!-- 2. 글자 불러오기 (팔레트) -->
   <section class="card tier">
     <p class="label">글자 불러오기</p>
     <div class="ptab-bar" role="tablist" aria-label="팔레트 분류">
@@ -437,7 +418,6 @@
   }
   let guidesOn = true;
   let ghostOn = true;
-  let pvScale = 3, pvCachedText = null, pvCachedItems = null, pvTimer = null;
 
   const gridEl = document.getElementById("grid");
   const guidesEl = document.getElementById("guides");
@@ -657,78 +637,12 @@
     renderTo(document.getElementById("pv1"), 1);
     renderTo(document.getElementById("pv2"), 2);
     renderTo(document.getElementById("pv3"), 3);
-    renderTextPreview();
   }
 
   // ---- export ----
   function entryText(ch, rows) {
     const body = rows.map(r => `        "${r}",`).join("\n");
     return `    "${ch}": [\n${body}\n    ],`;
-  }
-
-  // ---- text preview (mixed original + custom rendering) ----
-  function pvIsFullwidth(cp) {
-    // mirrors tools/spacing.py _is_fullwidth
-    return (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x1100 && cp <= 0x11FF) ||
-           (cp >= 0x3130 && cp <= 0x318F) || (cp >= 0x3040 && cp <= 0x30FF) ||
-           (cp >= 0xFF00 && cp <= 0xFFEF);
-  }
-  function pvMetrics(ch, grid) {
-    if (ch === " ") return { advance: 8, shift: 0 };
-    if (!grid || !grid.length) return { advance: 8, shift: 0 };
-    const w = grid[0].length;
-    if (pvIsFullwidth(ch.codePointAt(0))) return { advance: w, shift: 0 };
-    let lo = -1, hi = -1;
-    for (let y = 0; y < grid.length; y++)
-      for (let x = 0; x < w; x++)
-        if (grid[y][x] === "#") { if (lo < 0 || x < lo) lo = x; if (x > hi) hi = x; }
-    if (lo < 0) return { advance: 4, shift: 0 };
-    return { advance: (hi - lo + 1) + 2, shift: 1 - lo };
-  }
-  async function fetchPreviewItems(s) {
-    if (SERVER) {
-      try {
-        const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(s), { cache: "no-store" });
-        if (res.ok) return (await res.json()).chars;
-      } catch (e) { /* fall through to local */ }
-    }
-    return Array.from(s).map(ch =>
-      ({ ch, rows: DATA[ch] ? DATA[ch].rows : null }));
-  }
-  async function renderTextPreview() {
-    const input = document.getElementById("previewText");
-    const canvas = document.getElementById("pvText");
-    if (!input || !canvas) return;
-    const s = input.value;
-    if (s !== pvCachedText) {
-      pvCachedItems = await fetchPreviewItems(s);
-      pvCachedText = s;
-    }
-    const items = pvCachedItems.map(it =>
-      it.ch === curChar ? { ch: it.ch, rows: cellsToRows() } : it);
-    const ms = items.map(it => Object.assign({}, it, pvMetrics(it.ch, it.rows)));
-    const total = ms.reduce((a, m) => a + m.advance, 0) || 1;
-    canvas.width = total * pvScale;
-    canvas.height = 16 * pvScale;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink");
-    let pen = 0;
-    for (const m of ms) {
-      if (m.rows && m.rows.length) {
-        ctx.fillStyle = ink;
-        const w = m.rows[0].length;
-        for (let y = 0; y < 16; y++)
-          for (let x = 0; x < w; x++)
-            if (m.rows[y] && m.rows[y][x] === "#")
-              ctx.fillRect((pen + x + m.shift) * pvScale, y * pvScale, pvScale, pvScale);
-      } else if (m.ch !== " ") {
-        ctx.strokeStyle = ink;
-        ctx.strokeRect((pen + 1) * pvScale + 0.5, 2 * pvScale + 0.5,
-                       6 * pvScale - 1, 11 * pvScale - 1);
-      }
-      pen += m.advance;
-    }
   }
 
   // ---- palette ----
@@ -939,18 +853,6 @@
   document.getElementById("copyOne").addEventListener("click", e =>
     copy(entryText(curChar, cellsToRows()), e.currentTarget));
 
-  document.getElementById("previewText").addEventListener("input", () => {
-    clearTimeout(pvTimer);
-    pvTimer = setTimeout(renderTextPreview, 150);
-  });
-  document.querySelectorAll("[data-pvscale]").forEach(b =>
-    b.addEventListener("click", () => {
-      pvScale = +b.dataset.pvscale;
-      document.querySelectorAll("[data-pvscale]").forEach(x =>
-        x.setAttribute("aria-pressed", x === b ? "true" : "false"));
-      renderTextPreview();
-    }));
-
   // ---- server integration ----
   const statusEl = document.getElementById("status");
   const serverRow = document.getElementById("serverRow");
@@ -983,7 +885,6 @@
       await fetchKana();
       await loadPaletteData();
       buildPalette();
-      pvCachedText = null;               // refetch preview with server glyphs
       loadChar(paletteSource(curChar) ? curChar : defaultCharFor(WEIGHT));
     } catch (e) {
       setStatus(false, "오프라인 · 복사 방식");
@@ -1009,9 +910,7 @@
     }
     buildPalette();
     syncCellsTab();
-    pvCachedText = null;
     loadChar(defaultCharFor(weight));
-    renderTextPreview();
   }
   document.querySelectorAll(".wtab").forEach(b =>
     b.addEventListener("click", () => switchWeight(b.dataset.weight)));
@@ -1181,8 +1080,6 @@
     const j = await res.json();
     DATA[curChar] = { rows: cellsToRows() };
     buildPalette(); markPalette();
-    pvCachedText = null;
-    renderTextPreview();
     // Cell status is derived from the confirmed corpus, so a save can fill or
     // change a cell -- recompute rather than leaving a stale worklist.
     if (CELLS.length) {
