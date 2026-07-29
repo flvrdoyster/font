@@ -540,10 +540,12 @@
 
   // ---- ghost overlays ----
   // Three overlays, all gated by the 참조 오버레이 toggle:
-  //  - grey (#ghost): Regular-tab kana only -- the confirmed Light glyph of the
-  //    current char, to thicken 1px -> 2px against.
+  //  - #ghost (--ink): the other weight of the SAME character, whichever one
+  //    is the reference for what you're drawing. On the Bold tab for kana,
+  //    the confirmed Light glyph, to thicken 1px -> 2px against; on the
+  //    Regular tab for Hangul, the original Bold skeleton to thin down from.
   //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
-  //    CURRENT weight, so a similar already-drawn kana can be traced against.
+  //    CURRENT weight, so a similar already-drawn glyph can be traced against.
   //  - blue (#ghostSym, --guide): GNU Unifont, for symbols/punctuation only
   //    (see /api/symref). Shape reference; still redrawn by hand.
   function isKana(ch) {
@@ -557,17 +559,29 @@
   // Everything that isn't Hangul/kana gets the Unifont reference: Latin,
   // digits, punctuation, currency, math, arrows, box drawing, blocks, shapes.
   function isSymRef(ch) { return !isKana(ch) && !isHangul(ch); }
-  let lightCache = {};
-  async function fetchLight(ch) {
-    try {
-      const res = await fetch("api/text?weight=light&s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      lightCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      lightCache[ch] = null;
+  // One fetch for all three reference sources -- they differ only in URL.
+  // Caches null on failure too, so a miss isn't retried on every repaint;
+  // `ch in cache` (not truthiness) is what tells "already asked" from "not
+  // asked yet". Redraws when it lands, unless the user moved on since.
+  function refFetcher(url) {
+    const cache = {};
+    async function fetch1(ch) {
+      try {
+        const res = await fetch(url(ch), { cache: "no-store" });
+        const j = res.ok ? await res.json() : null;
+        cache[ch] = (j && j.chars && j.chars[0] && j.chars[0].rows) || null;
+      } catch (e) {
+        cache[ch] = null;
+      }
+      if (ch === curChar) drawGhost();
     }
-    if (ch === curChar) drawGhost();
+    // Returns the rows if known, else kicks off the fetch and returns null.
+    return ch => (ch in cache ? cache[ch] : (fetch1(ch), null));
   }
+  const refText = w => ch => `api/text?weight=${w}&s=` + encodeURIComponent(ch);
+  const lightRef = refFetcher(refText("light"));
+  const boldRef = refFetcher(refText("regular"));
+  const symRef = refFetcher(ch => "api/symref?s=" + encodeURIComponent(ch));
   function paintGhost(cv, rows, colorVar) {
     const px = 22;
     cv.width = W * px; cv.height = H * px;
@@ -582,50 +596,22 @@
         if (rows[y][x] === "#")
           ctx.fillRect((dx + x) * px, y * px, px, px);
   }
-  let symCache = {};
-  async function fetchSym(ch) {
-    try {
-      const res = await fetch("api/symref?s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      symCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      symCache[ch] = null;
-    }
-    if (ch === curChar) drawGhost();
-  }
-  let boldCache = {};
-  async function fetchBold(ch) {
-    try {
-      const res = await fetch("api/text?weight=regular&s=" + encodeURIComponent(ch), { cache: "no-store" });
-      const j = await res.json();
-      boldCache[ch] = (j.chars && j.chars[0] && j.chars[0].rows) || null;
-    } catch (e) {
-      boldCache[ch] = null;
-    }
-    if (ch === curChar) drawGhost();
-  }
   function drawGhost() {
     let rows = null;
     if (ghostOn && WEIGHT === "regular" && isKana(curChar)) {
-      if (curChar in lightCache) rows = lightCache[curChar];
-      else fetchLight(curChar);   // redraws when it lands
+      rows = lightRef(curChar);
     } else if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
       // Bold on purpose, unthinned: it shows the original skeleton as drawn,
       // and deciding which stroke survives the 1px reduction is a visual call
       // to make against it, not something to pre-apply.
-      if (curChar in boldCache) rows = boldCache[curChar];
-      else fetchBold(curChar);
+      rows = boldRef(curChar);
     }
     paintGhost(document.getElementById("ghost"), rows, "--ink");
     drawSymGhost();
     drawRefGhost();
   }
   function drawSymGhost() {
-    let rows = null;
-    if (ghostOn && isSymRef(curChar)) {
-      if (curChar in symCache) rows = symCache[curChar];
-      else fetchSym(curChar);
-    }
+    const rows = ghostOn && isSymRef(curChar) ? symRef(curChar) : null;
     paintGhost(document.getElementById("ghostSym"), rows, "--guide");
   }
   let refChar = "";
@@ -882,6 +868,7 @@
     serverRow.hidden = !on;
     buildBtn.hidden = !on;
     bmpBtn.hidden = !on;
+    syncCellsTab();          // 부품 셀 needs the server too
   }
 
   async function fetchWeightData(weight) {
@@ -954,9 +941,12 @@
   // only exists on that weight. Hiding it beats letting it be picked and then
   // switching the weight out from under the user -- that had the cell's own
   // loadChar racing the one switchWeight fires for its default character.
+  // The tab also needs the server: its list and preview are computed by
+  // /api/cells and /api/cell_preview, so with the file opened directly it
+  // would be a tab that silently shows an empty table.
   function syncCellsTab() {
     const tab = document.querySelector('.ptab[data-cat="cells"]');
-    const on = WEIGHT === "light";
+    const on = WEIGHT === "light" && SERVER;
     tab.hidden = !on;
     if (!on && tab.getAttribute("aria-selected") === "true") selectCat("hangul");
   }
@@ -1040,8 +1030,17 @@
         // syllables that don't use this component at all
         body: JSON.stringify({ ch, rows: cellsToRows(), cell: curCell.id }),
       });
+      // fetch does NOT reject on an HTTP error status, so without this an
+      // error body parses to .chars === undefined and reads as a legitimate
+      // "0 syllables" instead of a failure.
+      if (!res.ok) throw new Error(await res.text().catch(() => res.status));
       out = (await res.json()).chars || [];
-    } catch (e) { meta.textContent = "미리보기 실패"; return; }
+    } catch (e) {
+      meta.textContent = "미리보기 실패";
+      pal.innerHTML = "";
+      showToast(`미리보기 실패 · ${String(e.message || e)}`, "error");
+      return;
+    }
     pal.innerHTML = "";
     let composed = 0;
     for (const c of out) {
@@ -1073,9 +1072,13 @@
   async function refreshCells() {
     if (!SERVER) return;
     try {
-      const j = await (await fetch("api/cells", { cache: "no-store" })).json();
-      CELLS = j.cells || [];
-    } catch (e) { return; }
+      const res = await fetch("api/cells", { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text().catch(() => res.status));
+      CELLS = (await res.json()).cells || [];
+    } catch (e) {
+      showToast(`셀 목록 실패 · ${String(e.message || e)}`, "error");
+      return;
+    }
     if (curCell) curCell = CELLS.find(c => c.id === curCell.id) || curCell;
     renderCellList();
   }

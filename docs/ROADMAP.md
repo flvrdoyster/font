@@ -132,8 +132,9 @@
     그리는 원칙은 그대로. **동그라미는 한글 ㅇ(확정본, `아`/`오` 참고)과
     같은 "위아래 평평한 바 + 좌우 곧은 세로줄 + 네 모서리만 1px 대각선으로
     깎은 챔퍼드 렉탱글" 문법을 기준으로 삼는다.**
-  - 에디터: `/api/kana`(글자 목록), `/api/kanaref`(참조 렌더, Light 탭·가나
-    전용)
+  - 에디터: `/api/kana`(글자 목록). 참조 렌더용 `/api/kanaref`(위 MS Gothic을
+    래스터화)도 있었으나 가나 완료 후 안 쓰여 제거했다 — 다시 필요하면 git에서
+    되살린다(`editor_server.py`, ~140줄).
 - **반각 한글**: 폰트 빌드와 별개인 전용 도구로 착수 — `tools/halfwidth_editor.html`
   (`editor_server.py`가 `/halfwidth`로 서빙). `build_ufo.py`는 이 데이터를 전혀
   안 읽는다.
