@@ -90,27 +90,39 @@ def cv_beol(jong):
     return (bool(jong),)
 
 
+# 초중성이 오른쪽으로 가장 멀리 뻗는 중성들. 측정해보면 초중성의 오른쪽 끝은
+# 초성과 무관하게 중성만으로 정해지고 12/13/14 세 값만 나오는데, 그중 14인 것들.
+WIDE_JUNG = frozenset("ㅏㅑㅘ")
+
+
 def jong_beol(jong, jung):
     """받침 width/position follows the vowel above it. 겹받침 (two stacked
-    consonants) coarsen to compose_light's own 가로/세로 batchim split instead
-    of keying on the exact vowel: 22 cells rather than 231, for a fifth of the
-    accuracy gap.
+    consonants) instead key on whether the 초중성 above them runs wide, because
+    that is what they actually make room for -- a wide 초중성 gets a narrower
+    batchim and vice versa:
 
-    They were briefly collapsed all the way to one shape per jamo on a
-    leave-one-out number that averaged the two vowel classes together and so
-    hid the failure. Split apart, the horizontal-vowel syllables were the ones
-    paying: ㄳ has six samples and only 몫 is horizontal, so majority vote gave
-    all 1,045 ㅗ/ㅛ/ㅜ/ㅠ/ㅡ 겹받침 syllables a batchim positioned for a
-    vertical vowel. On a common test set:
+        ㄵ  얹(초중성 12칸) -> 종성 11칸    앉(14칸) -> 10칸
+        ㄺ  얽(12) -> 11                   갉(14) -> 10
+        ㄻ  걺(12) -> 11                   갊(14) -> 10
+        ㄼ  넓(12) -> 11                   닯(14) -> 10
 
-        중성 무시   11 cells  exact 70.6%  2.08px   (가로 0.78px)
-        가로/세로   22 cells  exact 75.5%  1.55px   (가로 0.14px)
-        중성별      231 cells  exact 86.3%  0.35px
+    Two 벌, same 22 cells as the 가로/세로 split it replaces, but the split is
+    on the axis the shapes actually vary along (leave-one-out over 119
+    confirmed 겹받침):
 
-    Anything finer than 가로/세로 buys nothing until more is drawn -- a 3-way
-    split that also separates 복합 vowels scored identically to the 2-way."""
+        가로/세로 (이전)   22 cells  exact 72.4%  2.40px
+        넓다/아니다        22 cells  exact 91.2%  0.41px
+        초중성 끝 3벌      33 cells  exact 92.0%  0.21px
+
+    Stop at two: the 3-벌 and a 넓다x가로세로 4-벌 both cost 11 more cells and
+    take unfilled ones from 2 to 9, for 0.8pt.
+
+    Earlier attempts, kept so they are not retried: collapsing 겹받침 to one
+    shape per jamo (11 cells) broke every horizontal-vowel syllable -- the
+    leave-one-out that endorsed it averaged the vowel classes together and hid
+    it. Never judge a batchim change on a pooled mean; split it by vowel class."""
     if jong in cl.CLUSTER_JONG:
-        return (cl.jong_bt(jung),)
+        return (jung in WIDE_JUNG,)
     return (jung,)
 
 
