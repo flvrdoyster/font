@@ -5,30 +5,39 @@
     --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #a4610a; --accent-soft: #f0e2cf;
     --grid-line: #c9ced9; --ref: #2f6fe0; --ref-soft: #dde8fc; --ref2: #d5362f;
     --confirm: #2e8b4f;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: light;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--ground); }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
-  h1 { font-size: 17px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
-  .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--ground);
+         line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
+
+  /* Same compact single-row toolbar as the main editor: identity + status,
+     no explanatory paragraph (goes stale, and the main editor dropped its
+     equivalent for the same reason). */
+  .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            margin-bottom: 14px; }
+  .topbar h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; font-weight: 650;
+               color: var(--muted); }
+
   .card { background: var(--panel); border: 1px solid var(--faint);
           border-radius: 12px; padding: 14px; }
+  .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   .palette-card { flex: 1 1 260px; min-width: 240px; max-height: 640px;
                   overflow-y: auto; }
   .palette { display: grid; grid-template-columns: repeat(auto-fill, 44px);
              gap: 6px; }
-  .swatch { width: 44px; height: 44px; border: 1px solid var(--grid-line);
+  .swatch { width: 44px; height: 44px; border: 1px solid var(--faint);
             border-radius: 6px; background: var(--cell-off); cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             font-size: 11px; color: var(--muted); position: relative; padding: 0; }
   .swatch:hover { border-color: var(--accent); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .swatch.saved { border-color: var(--confirm); }
-  .swatch.saved::after { content: "●"; position: absolute; top: 1px; right: 3px;
-                         font-size: 8px; color: var(--confirm); }
+  .swatch.saved::after { content: ""; position: absolute; top: 2px; right: 2px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--confirm); }
   .swatch.blank-ref { opacity: 0.45; }
   .swatch canvas { width: 32px; height: 32px; image-rendering: pixelated; pointer-events: none; }
   .draw-card { flex: 0 0 auto; }
@@ -43,13 +52,16 @@
   .ghost-ref { position: absolute; inset: 0; pointer-events: none;
                image-rendering: pixelated; opacity: 0.55; }
   .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-width: 176px; }
-  .btn { font: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer;
+  .btn { font: inherit; font-size: 12px; padding: 6px 11px; cursor: pointer;
          border: 1px solid var(--grid-line); border-radius: 7px; background: var(--panel);
          color: var(--ink); }
   .btn:hover { border-color: var(--accent); }
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.06); }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-  .status { font-size: 12px; color: var(--muted); }
+  .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+             border-radius: 20px; white-space: nowrap;
+             background: var(--faint); color: var(--muted); }
   .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
   .toggle input { accent-color: var(--accent); }
   .cur-label { font-size: 13px; font-weight: 600; margin-top: 14px; }
@@ -57,24 +69,33 @@
   .legend { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
                  margin-right: 4px; }
-  .toasts { position: fixed; bottom: 16px; right: 16px; display: flex;
-            flex-direction: column; gap: 8px; z-index: 20; }
-  .toast { font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
+  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50;
+            display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { pointer-events: auto; display: flex; align-items: center; gap: 8px;
+           font-size: 13px; padding: 9px 14px; border-radius: 9px; background: var(--ink);
            color: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-           opacity: 0; transform: translateY(6px); transition: all 0.2s; }
+           opacity: 0; transform: translateY(6px); transition: opacity 0.18s ease, transform 0.18s ease; }
   .toast.show { opacity: 1; transform: translateY(0); }
-  .toast[data-kind="error"] { background: #b3392c; color: #fff; }
+  .toast[data-kind="error"] { background: #b5432f; color: #fff; }
+  .toast[data-kind="success"] .dot { background: #59c37a; }
+  .toast .dot { width: 7px; height: 7px; border-radius: 50%; background: #8fa0b8; flex: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
 </style>
 
 <div class="wrap">
-  <h1>반각(半角) 한글 에디터</h1>
-  <p class="sub">폰트 빌드와는 별개의 도구입니다. <code>tools/glyphs_halfwidth.json</code>에 저장.</p>
+  <header class="topbar">
+    <h1>반각(半角)</h1>
+    <span class="status" id="status"></span>
+  </header>
 
   <div class="layout">
     <div class="card palette-card">
       <div class="palette" id="palette"></div>
       <p class="legend">
-        <span class="dot" style="background:var(--confirm)"></span>확정본(●)
+        <span class="dot" style="background:var(--confirm)"></span>확정본
         칸이 흐리면 = ROM 원본이 빈 칸
       </p>
     </div>
@@ -98,18 +119,17 @@
         <label class="toggle"><input type="checkbox" id="lightToggle" checked> Light 절반(빨강)</label>
       </div>
       <div class="tools">
+        <button class="btn primary" id="saveOne">저장</button>
+        <button class="btn" data-act="revert">원래대로</button>
         <button class="btn" data-act="clear">비우기</button>
-        <button class="btn" data-act="up">↑</button>
-        <button class="btn" data-act="down">↓</button>
+      </div>
+      <div class="tools">
         <button class="btn" data-act="left">←</button>
+        <button class="btn" data-act="down">↓</button>
+        <button class="btn" data-act="up">↑</button>
         <button class="btn" data-act="right">→</button>
         <button class="btn" data-act="copygrid">복사</button>
         <button class="btn" data-act="pastegrid">붙여넣기</button>
-        <button class="btn" data-act="revert">원래대로</button>
-      </div>
-      <div class="row">
-        <button class="btn primary" id="saveOne">저장</button>
-        <span class="status" id="status"></span>
       </div>
     </div>
   </div>
@@ -268,7 +288,11 @@
     return out;
   }
 
-  document.querySelector(".tools").addEventListener("click", e => {
+  // Delegated from .draw-card, not .tools: 저장/원래대로/비우기 and the
+  // arrows/copy/paste are now two separate .tools rows (matching the main
+  // editor's row-actions + tools split), and a single ".tools" selector only
+  // ever bound to the first one.
+  document.querySelector(".draw-card").addEventListener("click", e => {
     const act = e.target.dataset.act; if (!act) return;
     if (act === "clear") cells = blank();
     else if (act === "up") cells = shift(0, -1);
@@ -294,14 +318,15 @@
     const el = document.createElement("div");
     el.className = "toast";
     el.dataset.kind = kind || "info";
-    el.textContent = message;
+    el.innerHTML = `<span class="dot"></span><span></span>`;
+    el.lastElementChild.textContent = message;
     toastsEl.appendChild(el);
     requestAnimationFrame(() => el.classList.add("show"));
-    const life = kind === "error" ? 4200 : 2200;
+    const life = kind === "error" ? 4200 : 2400;
     setTimeout(() => {
       el.classList.remove("show");
       el.addEventListener("transitionend", () => el.remove(), { once: true });
-      setTimeout(() => el.remove(), 300);
+      setTimeout(() => el.remove(), 300); // fallback if no transition fires
     }, life);
   }
 
