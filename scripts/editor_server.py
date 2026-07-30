@@ -7,7 +7,7 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
 
   GET  /editor.css        -> tools/editor.css, the shared visual foundation
                              (colour tokens, page shell, card/button/status
-                             pill/toast) both this page and /halfwidth link
+                             pill/toast) both this page and /half link
                              to. Page-specific CSS stays inline in each file.
   GET  /api/glyphs?weight=regular|light
                           -> current glyphs_<weight>.json { "A": [rows], ... }
@@ -47,7 +47,7 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              completed-form Light Hangul + glyphs_halfwidth.json.
                              Unrelated to the TTF build above.
 
-Also serves tools/halfwidth_editor.html at /halfwidth -- a separate tool for
+Also serves tools/halfwidth_editor.html at /half -- a separate tool for
 hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
 (nothing here feeds build_ufo.py):
 
@@ -801,7 +801,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/cells":
             return self._send(200, json.dumps({"cells": component_cells()},
                                               ensure_ascii=False))
-        if parsed.path in ("/halfwidth", "/halfwidth.html", "/halfwidth/"):
+        if parsed.path in ("/half", "/half.html", "/half/"):
             with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
                 page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
@@ -953,7 +953,7 @@ def _ensure_venv():
 # separately would offer the same page twice.
 PAGES = [
     ("메인 에디터", "/"),
-    ("반각 한글 에디터", "/halfwidth"),
+    ("반각 한글 에디터", "/half"),
 ]
 
 
@@ -969,7 +969,7 @@ def main():
     print(f"pixel editor: {url}  (Ctrl+C to stop)")
     print(f"  editing tools/glyphs_bold.json / glyphs_light.json  ·  POST /api/build?weight=regular|light to rebuild")
     print(f"  부품 셀: 메인 에디터의 팔레트 탭  ·  11,172자 확장용 (docs/ROADMAP.md)")
-    print(f"  반각 한글 에디터: {url}halfwidth  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
+    print(f"  반각 한글 에디터: {url}half  ·  editing tools/glyphs_halfwidth.json (separate from the font build)")
 
     # Serve in the background so the terminal prompt below can run while the
     # server is already up -- opening a browser before serve_forever() starts

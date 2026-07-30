@@ -136,7 +136,7 @@
     래스터화)도 있었으나 가나 완료 후 안 쓰여 제거했다 — 다시 필요하면 git에서
     되살린다(`editor_server.py`, ~140줄).
 - **반각 한글**: 폰트 빌드와 별개인 전용 도구로 착수 — `tools/halfwidth_editor.html`
-  (`editor_server.py`가 `/halfwidth`로 서빙). `build_ufo.py`는 이 데이터를 전혀
+  (`editor_server.py`가 `/half`로 서빙). `build_ufo.py`는 이 데이터를 전혀
   안 읽는다.
   - `font.bmp`의 col10-11(완성형 '가'에서 왼쪽 6-7칸)에 PC-98 자체 반각 한글 표가
     있음을 발견 — KS X 1001도 유니코드 반각 자모 블록도 아닌 ROM 고유 배열이라

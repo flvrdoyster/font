@@ -28,15 +28,27 @@
      the swatch shows the actual proportions instead of a stretched square. */
   .swatch canvas { height: 32px; width: auto; image-rendering: pixelated; pointer-events: none; }
   .draw-card { flex: 0 0 auto; }
-  .grid-outer { position: relative; width: 176px; height: 352px; }
-  .grid { position: absolute; inset: 0; display: grid;
+  /* No fixed size here -- .grid (below) sizes itself from its own border +
+     grid-template-columns, same as the main editor, and grid-outer just
+     wraps that. Fixing this at 176x352 (the *inner* cell area, minus the
+     2px border) was what pushed .grid to fill via inset:0 with no border
+     of its own -- the left/top edge had no line at all (only cells got
+     border-right/border-bottom, and nothing drew the two missing sides),
+     and the ghost overlays (inset:0, matched to that same box) were
+     stretching their 176x352 canvas bitmap into a slightly-off CSS box. */
+  .grid-outer { position: relative; }
+  .grid { display: grid; gap: 0; background: var(--grid-line);
+          border: 2px solid var(--grid-line);
           grid-template-columns: repeat(8, 22px); grid-auto-rows: 22px; }
   .cell { width: 22px; height: 22px; background: var(--cell-off); border: 0;
           padding: 0; cursor: pointer; }
   .grid.showgrid .cell { border-right: 1px solid var(--grid-line);
                          border-bottom: 1px solid var(--grid-line); }
   .cell.on { background: var(--ink); }
-  .ghost-ref { position: absolute; inset: 0; pointer-events: none;
+  /* inset:2px, not 0 -- sits exactly inside .grid's 2px border, so this
+     canvas's 176x352 bitmap (its width/height attributes) lands on a CSS
+     box of the same size instead of being stretched to fit the border too. */
+  .ghost-ref { position: absolute; inset: 2px; pointer-events: none;
                image-rendering: pixelated; opacity: 0.55; }
   .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-width: 176px; }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }

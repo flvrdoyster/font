@@ -72,8 +72,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 브라우저에서 픽셀을 클릭·드래그해 편집한다. 두 굵기(상단 탭: **Regular** 1px 줄기·
 기본 / **Bold** 2px 줄기)는 각각의 글리프 파일(`glyphs_light.json` = 1px,
 `glyphs_bold.json` = 2px)에 바로 기록된다. 빌드 버튼은 한 번에 두 멤버를
-컴파일한다. 서버 없이 [tools/pixel_editor.html](tools/pixel_editor.html)만 열어도
-복사 방식으로 쓸 수 있다.
+컴파일한다. 저장에는 서버(`scripts/editor_server.py`)가 필요하다 —
+[tools/pixel_editor.html](tools/pixel_editor.html)을 서버 없이 열면 편집은 되지만
+저장할 방법이 없다.
 
 Regular를 11,172자로 넓히는 작업은 팔레트의 **부품 셀** 탭에서 한다 — 셀을 고르면
 그 셀의 대표 음절이 캔버스로 올라오고, 그려서 저장하면 부품이 자동 추출된다
@@ -85,5 +86,5 @@ Regular를 11,172자로 넓히는 작업은 팔레트의 **부품 셀** 탭에�
 .venv/bin/python scripts/compose_components.py --build      # 검토용 11,172자 출력
 ```
 
-반각 한글은 별도 도구(`/halfwidth`)를 쓴다. 서버는 시작할 때 어느 페이지를 열지
+반각 한글은 별도 도구(`/half`)를 쓴다. 서버는 시작할 때 어느 페이지를 열지
 묻는다.

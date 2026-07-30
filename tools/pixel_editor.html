@@ -160,7 +160,7 @@
       <button class="wtab" data-weight="regular" role="tab" aria-selected="false"
         title="2px 줄기 — 컴파일하면 Bold 멤버">Bold <span class="wtab-note">2px</span></button>
     </div>
-    <span class="status" id="status" data-on="false">오프라인 · 복사 방식</span>
+    <span class="status" id="status" data-on="false">오프라인 · 저장 불가</span>
     <span style="flex:1"></span>
     <button class="btn" id="buildBmp" hidden
       title="PC-98용 테스트 font.bmp를 다시 만듭니다 — 완성형 Light(compose_light.py)와 반각 한글(glyphs_halfwidth.json)을 최신 저장 내용으로 반영합니다. build/font_light.bmp에 씀. 편집 중인 미저장 글자는 포함되지 않습니다.">BMP</button>
@@ -211,7 +211,6 @@
             <button class="btn" data-act="copygrid">복사</button>
             <button class="btn" data-act="pastegrid">붙여넣기</button>
           </div>
-          <button class="btn" id="copyOne">customglyphs.py 형식으로 복사</button>
         </div>
 
         <div class="preview">
@@ -588,12 +587,6 @@
     renderTo(document.getElementById("pv3"), 3);
   }
 
-  // ---- export ----
-  function entryText(ch, rows) {
-    const body = rows.map(r => `        "${r}",`).join("\n");
-    return `    "${ch}": [\n${body}\n    ],`;
-  }
-
   // ---- palette ----
   function paletteSource(ch) {
     return DATA[ch] ? DATA[ch].rows : (paletteData[ch] || null);
@@ -798,16 +791,6 @@
     return out;
   }
 
-  // ---- copy ----
-  function copy(text, btn) {
-    navigator.clipboard.writeText(text).then(() => {
-      const t = btn.textContent; btn.textContent = "복사됨 ✓";
-      setTimeout(() => { btn.textContent = t; }, 1200);
-    });
-  }
-  document.getElementById("copyOne").addEventListener("click", e =>
-    copy(entryText(curChar, cellsToRows()), e.currentTarget));
-
   // ---- server integration ----
   const statusEl = document.getElementById("status");
   const saveBtn = document.getElementById("saveOne");
@@ -843,7 +826,7 @@
       buildPalette();
       loadChar(paletteSource(curChar) ? curChar : defaultCharFor(WEIGHT));
     } catch (e) {
-      setStatus(false, "오프라인 · 복사 방식");
+      setStatus(false, "오프라인 · 저장 불가");
     }
   }
 
