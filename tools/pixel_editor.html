@@ -749,7 +749,11 @@
 
   // ---- tools ----
   let gridClipboard = null; // { w, rows: boolean[][] } -- in-memory, cross-character
-  document.querySelector(".tools").addEventListener("click", e => {
+  // Delegated from .side-controls, not .tools: 저장/원래대로/비우기 live in the
+  // separate .row-actions row above it, and a ".tools"-only selector never
+  // caught clicks there (same bug, same fix, as halfwidth_editor.html's
+  // .tools/.draw-card split).
+  document.querySelector(".side-controls").addEventListener("click", e => {
     const act = e.target.dataset.act; if (!act) return;
     if (act === "clear") cells = blank(W);
     else if (act === "up") cells = shift(0, -1);
