@@ -79,6 +79,11 @@ hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
                              (red) for whichever character the editor's
                              halfwidth_char_map.json says the current slot is
 
+Also serves tools/text_preview.html at /preview -- type any string and see it
+set in the current saved glyphs (via /api/text) side by side, no font build
+involved. For catching things a single-glyph view can't: relative spacing
+between specific neighboring characters.
+
 Stdlib only. Run from the repo root.
 """
 import argparse
@@ -94,6 +99,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
+TEXT_PREVIEW = os.path.join(ROOT, "tools", "text_preview.html")
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
@@ -113,6 +119,12 @@ HALFWIDTH_PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<title>반각 한글 에디터</title>" + _CSS_LINK + "</head><body>"
+)
+
+PREVIEW_PAGE_HEAD = (
+    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>미리 써보기</title>" + _CSS_LINK + "</head><body>"
 )
 
 
@@ -862,6 +874,10 @@ class Handler(BaseHTTPRequestHandler):
             with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
                 page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path in ("/preview", "/preview.html", "/preview/"):
+            with open(TEXT_PREVIEW, encoding="utf-8") as f:
+                page = PREVIEW_PAGE_HEAD + f.read() + PAGE_TAIL
+            return self._send(200, page, "text/html; charset=utf-8")
         if parsed.path == "/api/halfwidth_ref":
             return self._send(200, json.dumps({"slots": halfwidth_ref_slots()},
                                               ensure_ascii=False))
@@ -1025,6 +1041,7 @@ def _ensure_venv():
 PAGES = [
     ("메인 에디터", "/"),
     ("반각 한글 에디터", "/half"),
+    ("미리 써보기", "/preview"),
 ]
 
 
