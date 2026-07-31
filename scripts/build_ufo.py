@@ -47,6 +47,11 @@ _EXPLICIT_EXCLUDE = {
 }
 
 
+def _is_kana(cp):
+    return cp is not None and (0x3041 <= cp <= 0x309F or 0x30A1 <= cp <= 0x30FF
+                                or 0xFF61 <= cp <= 0xFF9F)
+
+
 def _excluded_codepoint(cp):
     if cp is None:
         return False
@@ -65,7 +70,7 @@ def _expected_blank(cp):
     return unicodedata.category(chr(cp)) in ("Zs", "Zl", "Zp", "Cf")
 
 
-def build(chars=None, all_glyphs=False, proportional=False):
+def build(chars=None, all_glyphs=False, proportional=False, exclude_kana=False):
     font = TTFont("original/HANKBC.ttf")
     strike = pf.read_strike(font)
     cmap = font.getBestCmap()
@@ -105,6 +110,8 @@ def build(chars=None, all_glyphs=False, proportional=False):
             continue
         width_px, rows = strike[gname]
         cp = rev.get(gname)
+        if exclude_kana and _is_kana(cp):
+            continue
         if cp in cg.GLYPHS:                    # hand-drawn override
             width_px, rows = cg.GLYPHS[cp]
         else:
@@ -146,6 +153,8 @@ def build(chars=None, all_glyphs=False, proportional=False):
             continue
         if wanted_cps is not None and cp not in wanted_cps:
             continue
+        if exclude_kana and _is_kana(cp):
+            continue
         if proportional:
             adv_px, shift_px = sp.proportional(width_px, rows, cp)
         else:
@@ -171,7 +180,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
     return ufo
 
 
-def build_light(proportional=False):
+def build_light(proportional=False, exclude_kana=False):
     """Light weight: Latin/numbers and Hangul both follow the same
     confirmed-first rule -- a glyph hand-drawn and saved in
     tools/glyphs_light.json is used verbatim; anything unsaved is filled
@@ -194,6 +203,8 @@ def build_light(proportional=False):
     latin_src = cg.load_src()
     light_latin_src, latin_hand, latin_thinned = {}, 0, 0
     for ch, grid in latin_src.items():
+        if exclude_kana and len(ch) == 1 and _is_kana(ord(ch)):
+            continue
         if ch in refs:
             light_latin_src[ch] = refs[ch]
             latin_hand += 1
@@ -292,17 +303,21 @@ def main():
                     help="derive proportional advances from pixel ink bounds")
     ap.add_argument("--weight", choices=["regular", "light"], default="regular")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--exclude-kana", action="store_true",
+                    help="leave kana out of the build (glyph data stays in "
+                         "glyphs_light.json/glyphs_bold.json either way) -- "
+                         "for while kana spacing is still being reworked")
     args = ap.parse_args()
 
     if args.weight == "light":
-        ufo = build_light(proportional=args.proportional)
+        ufo = build_light(proportional=args.proportional, exclude_kana=args.exclude_kana)
         out = args.out or "build/DokkaebiDNRGothic-Regular.ufo"
     elif args.all:
-        ufo = build(all_glyphs=True, proportional=args.proportional)
+        ufo = build(all_glyphs=True, proportional=args.proportional, exclude_kana=args.exclude_kana)
         out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
     else:
         text = args.subset or "안녕하세요세계 다람쥐헌쳇바퀴 Hello, World! 0123456789 @#&"
-        ufo = build(chars=set(text), proportional=args.proportional)
+        ufo = build(chars=set(text), proportional=args.proportional, exclude_kana=args.exclude_kana)
         out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     ufo.save(out, overwrite=True)

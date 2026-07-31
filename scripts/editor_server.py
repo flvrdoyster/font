@@ -934,18 +934,21 @@ class Handler(BaseHTTPRequestHandler):
 # The two internal weight keys map to the two members of one RIBBI family:
 # "regular" = 2px stems -> compiled Bold; "light" = 1px stems -> compiled
 # Regular (the family default). See tools/metadata.py / build_ufo.py.
+# --exclude-kana: kana spacing is still being reworked (see docs/ROADMAP.md),
+# so leave it out of the compiled font for now -- doesn't touch the glyph
+# data itself, still fully editable here. Drop the flag once kana is ready.
 BUILD_TARGETS = {
     "regular": {
         "ufo": "build/DokkaebiDNRGothic-Bold.ufo",
         "ttf": "build/DokkaebiDNRGothic-Bold.ttf",
         "otf": "build/DokkaebiDNRGothic-Bold.otf",
-        "build_args": ["--all"],
+        "build_args": ["--all", "--exclude-kana"],
     },
     "light": {
         "ufo": "build/DokkaebiDNRGothic-Regular.ufo",
         "ttf": "build/DokkaebiDNRGothic-Regular.ttf",
         "otf": "build/DokkaebiDNRGothic-Regular.otf",
-        "build_args": ["--weight", "light"],
+        "build_args": ["--weight", "light", "--exclude-kana"],
     },
 }
 

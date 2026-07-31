@@ -34,17 +34,19 @@ jobs:
         working-directory: font
         run: pip install -r requirements.txt
 
+      # --exclude-kana: kana spacing is still being reworked (docs/ROADMAP.md).
+      # Drop the flag once it's ready -- the glyph data itself is untouched.
       - name: Build Regular (1px)
         working-directory: font
         run: |
-          python scripts/build_ufo.py --weight light --proportional --out build/DokkaebiDNRGothic-Regular.ufo
+          python scripts/build_ufo.py --weight light --proportional --exclude-kana --out build/DokkaebiDNRGothic-Regular.ufo
           fontmake -u build/DokkaebiDNRGothic-Regular.ufo -o ttf otf --output-dir build
           python scripts/finalize.py build/DokkaebiDNRGothic-Regular.ttf build/DokkaebiDNRGothic-Regular.otf
 
       - name: Build Bold (2px)
         working-directory: font
         run: |
-          python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic-Bold.ufo
+          python scripts/build_ufo.py --all --proportional --exclude-kana --out build/DokkaebiDNRGothic-Bold.ufo
           fontmake -u build/DokkaebiDNRGothic-Bold.ufo -o ttf otf --output-dir build
           python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
 

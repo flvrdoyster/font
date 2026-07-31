@@ -118,6 +118,14 @@ def _shift_cols(width, row, dx):
 def main():
     expected = expected_light() if IS_LIGHT else expected_bold()
 
+    # Kana may have been left out on purpose (build_ufo.py --exclude-kana --
+    # see docs/ROADMAP.md, kana spacing is still being reworked). Detect it
+    # from the actual font rather than assuming: check one kana codepoint's
+    # presence, since a flag passed at build time isn't visible here.
+    probe = TTFont(BUILT).getBestCmap()
+    if not any(bu._is_kana(cp) for cp in probe):
+        expected = {cp: v for cp, v in expected.items() if not bu._is_kana(cp)}
+
     if ARGS.proportional:
         shifted = {}
         for cp, (width, rows) in expected.items():

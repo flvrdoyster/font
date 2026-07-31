@@ -18,7 +18,8 @@ Bold(2px)** 로 묶여 나오므로, 앱에서 볼드를 걸면(Cmd+B 등) 두�
   한글 `font.bmp`
 - 커버리지: Bold(2px)·Regular(1px) 둘 다 한글 11,172자 전부. 손그림 4,101자가
   우선이고 나머지는 자모 부품 조합으로 채운다 — [docs/ROADMAP.md](docs/ROADMAP.md)
-  참고. 둘 다 라틴·가나·키릴·그리스·기호 포함, 한자 없음
+  참고. 둘 다 라틴·가나·키릴·그리스·기호 포함, 한자 없음(가나는 간격 다듬는 중이라
+  `--exclude-kana`로 빌드에서 잠시 뺀 상태 — 글리프 자체는 그대로 있음)
 - 라이선스: SIL Open Font License 1.1, 예약 글꼴 이름 `Dokkaebi DNR` — [OFL.txt](OFL.txt)
 - 변환 방식: 픽셀을 64×64 유닛 정사각형으로 보고 인접 픽셀의 공유 변을 상쇄해 병합
   폴리곤을 만든다. 곡선 트레이싱을 쓰지 않으므로 확대해도 계단이 그대로 보존된다.
@@ -59,12 +60,12 @@ Regular/Bold).
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # Regular 멤버 (1px 줄기)
-.venv/bin/python scripts/build_ufo.py --weight light --proportional --out build/DokkaebiDNRGothic-Regular.ufo
+.venv/bin/python scripts/build_ufo.py --weight light --proportional --exclude-kana --out build/DokkaebiDNRGothic-Regular.ufo
 .venv/bin/fontmake -u build/DokkaebiDNRGothic-Regular.ufo -o ttf otf --output-dir build/
 .venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic-Regular.ttf build/DokkaebiDNRGothic-Regular.otf
 
 # Bold 멤버 (2px 줄기, 전체 11,172자)
-.venv/bin/python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic-Bold.ufo
+.venv/bin/python scripts/build_ufo.py --all --proportional --exclude-kana --out build/DokkaebiDNRGothic-Bold.ufo
 .venv/bin/fontmake -u build/DokkaebiDNRGothic-Bold.ufo -o ttf otf --output-dir build/
 .venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
 
