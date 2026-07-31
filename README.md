@@ -64,6 +64,29 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic-Bold.ttf
 ```
 
+## 웹폰트
+
+OTF(CFF)가 TTF보다 압축이 더 잘 된다 -- 픽셀 폰트라 글리프당 포인트 수가 워낙 적어서
+서브셋이 따로 필요 없다(11,172자 한글 + 라틴 + 가나 + 기호 전량 포함해도 웨이트당
+150KB 아래).
+
+```bash
+.venv/bin/python scripts/build_webfont.py build/DokkaebiDNRGothic-Regular.otf build/DokkaebiDNRGothic-Bold.otf
+```
+
+```css
+@font-face {
+  font-family: "Dokkaebi DNR Gothic";
+  src: url("DokkaebiDNRGothic-Regular.woff2") format("woff2");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Dokkaebi DNR Gothic";
+  src: url("DokkaebiDNRGothic-Bold.woff2") format("woff2");
+  font-weight: 700;
+}
+```
+
 ## 픽셀 에디터
 
 ```bash
