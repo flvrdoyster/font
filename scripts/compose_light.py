@@ -20,7 +20,7 @@ To compose an unsaved target T = (초성 C1, 중성 V, 종성 C2): swap the cano
 Zones are 2-D (not a row cut), so a tall double 초성 (ㄲ/ㄸ/ㅃ...) descending
 into the batchim rows stays whole -- its low pixels don't vary with 종성.
 
-Inputs:  ../gensei-pc98/docs/bios/font.bmp, tools/pc98_hangul_map.json,
+Inputs:  original/pc98_font.bmp, tools/pc98_hangul_map.json,
          tools/glyphs_light.json
 Output:  build/light_hangul.json   { "가": [16 rows of #/.], ... }  (2,350)
          build/light_specimen.png  (with --specimen)
@@ -32,7 +32,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 PC98_MAP = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
 REFS = os.path.join(ROOT, "tools", "glyphs_light.json")
 OUT = os.path.join(ROOT, "build", "light_hangul.json")

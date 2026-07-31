@@ -1,0 +1,74 @@
+name: Build & deploy webfont
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # No PC-98 reference needed: that's only used to EXTRACT jamo components,
+      # and the extraction result is committed (tools/component_library.json).
+      # The build is corpus + that file. See compose_components.py --freeze.
+      - name: Checkout font
+        uses: actions/checkout@v4
+        with:
+          path: font
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: font
+        run: pip install -r requirements.txt
+
+      - name: Build Regular (1px)
+        working-directory: font
+        run: |
+          python scripts/build_ufo.py --weight light --proportional --out build/DokkaebiDNRGothic-Regular.ufo
+          fontmake -u build/DokkaebiDNRGothic-Regular.ufo -o ttf otf --output-dir build
+          python scripts/finalize.py build/DokkaebiDNRGothic-Regular.ttf build/DokkaebiDNRGothic-Regular.otf
+
+      - name: Build Bold (2px)
+        working-directory: font
+        run: |
+          python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic-Bold.ufo
+          fontmake -u build/DokkaebiDNRGothic-Bold.ufo -o ttf otf --output-dir build
+          python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
+
+      - name: Build webfonts (WOFF2)
+        working-directory: font
+        run: python scripts/build_webfont.py build/DokkaebiDNRGothic-Regular.otf build/DokkaebiDNRGothic-Bold.otf
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p _site
+          cp font/web/index.html _site/
+          cp font/build/DokkaebiDNRGothic-Regular.woff2 _site/
+          cp font/build/DokkaebiDNRGothic-Bold.woff2 _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

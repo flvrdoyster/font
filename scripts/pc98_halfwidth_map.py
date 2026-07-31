@@ -2,7 +2,9 @@
 record it as tools/pc98_halfwidth_map.json, the reference used by
 tools/halfwidth_editor.html.
 
-Source bitmap: ../gensei-pc98/docs/bios/font.bmp (2048x2048, 1bpp, 16px grid).
+Source bitmap: original/pc98_font.bmp (2048x2048, 1bpp, 16px grid) -- a
+read-only copy of gensei-pc98's font.bmp as it stood before any of our own
+Hangul was ever delivered into it (see docs/ROADMAP.md).
 Columns 10-11 (starting 6 columns left of the 완성형 Hangul block's col 16 =
 '가') hold a 2x94-slot table of pre-composed halfwidth Hangul syllables (plus
 a few punctuation marks in col 11's tail) -- NOT the standard KS X 1001 order,
@@ -22,7 +24,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 OUT = os.path.join(ROOT, "tools", "pc98_halfwidth_map.json")
 
 COLS = [10, 11]

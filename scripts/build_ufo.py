@@ -202,9 +202,12 @@ def build_light(proportional=False):
             latin_thinned += 1
     light_latin = cg.build(light_latin_src)
 
-    pc98 = cl.load_pc98()
-    corpus = cc.load_corpus()
-    lib = cc.build_library(corpus, pc98, cc.build_zone_indices(corpus, pc98))
+    # The frozen extraction result (tools/component_library.json), not a fresh
+    # extraction: only extraction needs the PC-98 reference bitmap, and it's
+    # already done. Reading it here keeps the font build self-contained --
+    # corpus + library is the whole input. Re-freeze after drawing new
+    # syllables: compose_components.py --freeze.
+    lib = cc.load_library()
     # hand-drawn glyphs are authoritative; compose only fills the unsaved gaps
     light_hangul_src, hand, gaps = {}, 0, 0
     for ch in cc.FULL:

@@ -2,7 +2,12 @@
 record the result as tools/pc98_kana_map.json, the reference used when drawing
 Light-weight kana.
 
-Source bitmap: ../gensei-pc98/docs/bios/font.bmp (2048x2048, 1bpp, 16px grid).
+Source bitmap: original/pc98_font.bmp (2048x2048, 1bpp, 16px grid) -- a
+read-only copy of gensei-pc98's font.bmp as it stood before any of our own
+Hangul was ever delivered into it (see docs/ROADMAP.md). Kana were never
+touched by that delivery either way (only the Hangul/halfwidth-Hangul cells
+were), but reading from the pristine copy keeps every PC-98 lookup on the
+same, unambiguously-original source.
 Unlike the Hangul block (a custom 25-column replacement, see
 pc98_hangul_map.py), kana sit in the ROM's ORIGINAL JIS X 0208 ku allocation:
 each ku gets one dedicated column, and within it row = 32 + ten walks that ku's
@@ -24,7 +29,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 OUT = os.path.join(ROOT, "tools", "pc98_kana_map.json")
 
 ROW0 = 32  # row = ROW0 + ten

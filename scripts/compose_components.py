@@ -78,6 +78,7 @@ ROOT = cl.ROOT
 # reading the source of truth lets them feed straight back in.
 CORPUS = os.path.join(ROOT, "tools", "glyphs_light.json")
 FULL = [chr(c) for c in range(0xAC00, 0xD7A4)]              # all 11,172
+LIBRARY = os.path.join(ROOT, "tools", "component_library.json")
 FULL_OUT = os.path.join(ROOT, "build", "light_hangul_full.json")
 FULL_SPECIMEN = os.path.join(ROOT, "build", "light_hangul_full_specimen.png")
 CELL_SPECIMEN = os.path.join(ROOT, "build", "cell_review_specimen.png")
@@ -297,6 +298,44 @@ def build_library(corpus, pc98, cho_ref):
             for cell, cand in observe(corpus, pc98, cho_ref).items()}
 
 
+# ---- frozen library ---------------------------------------------------------
+# Extraction (observe/build_library) is the ONLY thing that needs PC-98: it has
+# to see which pixels move as one jamo varies to know where 초성 ends and 중성
+# begins. compose() just unions already-extracted components and needs nothing.
+#
+# So the extraction result is frozen here, and the build reads this file rather
+# than re-deriving it from PC-98 every time. That makes the font build (and CI)
+# self-contained -- corpus + this file is the whole input. Re-freeze with
+# --freeze after drawing new syllables, which is when PC-98 is actually needed.
+
+def _cell_key(cell):
+    kind, jamo, beol = cell
+    return f"{kind}:{jamo}:{'|'.join(str(b) for b in beol)}"
+
+
+def _key_cell(key):
+    kind, jamo, beol = key.split(":")
+    parts = tuple(True if b == "True" else False if b == "False" else b
+                  for b in beol.split("|"))
+    return (kind, jamo, parts)
+
+
+def save_library(lib, path=LIBRARY):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    ser = {_cell_key(cell): sorted([y, x] for y, x in px)
+           for cell, px in sorted(lib.items(), key=lambda kv: _cell_key(kv[0]))}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(ser, f, ensure_ascii=False, indent=0)
+        f.write("\n")
+    return len(ser)
+
+
+def load_library(path=LIBRARY):
+    with open(path, encoding="utf-8") as f:
+        ser = json.load(f)
+    return {_key_cell(k): frozenset((y, x) for y, x in v) for k, v in ser.items()}
+
+
 def compose(ch, lib):
     """Union the syllable's cells. None if any cell is missing -- no silent
     fallback, since borrowing a component from an unrelated context is what
@@ -392,14 +431,36 @@ def main():
     ap.add_argument("--missing", action="store_true")
     ap.add_argument("--blobs", action="store_true")
     ap.add_argument("--cellreview", action="store_true")
+    ap.add_argument("--freeze", action="store_true",
+                    help="write tools/component_library.json (the build reads "
+                         "that instead of re-extracting from PC-98)")
+    ap.add_argument("--reextract", action="store_true",
+                    help="for --coverage/--missing/--blobs/--cellreview/--build: "
+                         "re-extract from PC-98 instead of reading the frozen "
+                         "library, to preview what a --freeze would change "
+                         "(needs original/pc98_font.bmp)")
     ap.add_argument("--build", action="store_true")
     args = ap.parse_args()
 
     corpus = load_corpus()
-    pc98 = cl.load_pc98()
-    cho_ref = build_zone_indices(corpus, pc98)
-    seen = observe(corpus, pc98, cho_ref)
-    lib = {cell: c.most_common(1)[0][0] for cell, c in seen.items()}
+    needs_pc98 = args.validate or args.loo or args.freeze or args.reextract
+    pc98 = cho_ref = seen = None
+    if needs_pc98:
+        pc98 = cl.load_pc98()
+        cho_ref = build_zone_indices(corpus, pc98)
+        seen = observe(corpus, pc98, cho_ref)
+
+    # --validate/--loo measure the extraction algorithm itself (that's their
+    # whole point when tuning it -- see docs/ROADMAP.md's jong_zone/LV_FLOOR
+    # write-ups), so they always use a live re-extraction. Everything else
+    # reads the frozen library by default, same as the actual font build --
+    # so these numbers match what ships instead of a live re-extraction that
+    # may since have drifted ("PC-98 참조 오염 발견"). --reextract previews
+    # what a --freeze would change.
+    if seen is not None:
+        lib = {cell: c.most_common(1)[0][0] for cell, c in seen.items()}
+    else:
+        lib = load_library() if os.path.exists(LIBRARY) else {}
 
     req = required_cells()
     kinds = Counter(k for k, _, _ in req)
@@ -473,6 +534,10 @@ def main():
 
     if args.cellreview:
         write_cell_specimen(corpus, lib)
+
+    if args.freeze:
+        n = save_library(lib)
+        print(f"\nfroze {n} cells -> {LIBRARY}")
 
     if args.build:
         full = {}

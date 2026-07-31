@@ -1,7 +1,9 @@
 """Assemble a test PC-98 BIOS font.bmp with our Light Hangul dropped in.
 
-Takes the original gensei-pc98 font.bmp untouched (ANK table, kana, kanji,
-symbols, ...) and overwrites:
+Takes the pristine original PC-98 BIOS bitmap (original/pc98_font.bmp -- a
+read-only copy of gensei-pc98's font.bmp as it stood before any of our own
+Hangul was ever delivered into it; see docs/ROADMAP.md) untouched (ANK table,
+kana, kanji, symbols, ...) and overwrites:
 
   - the 완성형 Hangul cells (tools/pc98_hangul_map.json, cols 16-40) with our
     Light-weight 2,350-syllable set (build/light_hangul.json, see
@@ -16,10 +18,11 @@ Everything else in the bitmap -- including kana, which now also lives in the
 완성형 block per the PC-98 kana discovery -- is left exactly as the original
 ROM drew it.
 
-This is a test/preview output only: it writes a new file, never touches
-../gensei-pc98 itself.
+This is a test/preview output only: it writes a new file here, never touches
+../gensei-pc98 itself -- delivering the result there (replacing its
+docs/bios/font.bmp) is a separate, manual step.
 
-Inputs:  ../gensei-pc98/docs/bios/font.bmp,
+Inputs:  original/pc98_font.bmp,
          tools/pc98_hangul_map.json, build/light_hangul.json
            (run scripts/compose_light.py first if stale)
          tools/pc98_halfwidth_map.json, tools/glyphs_halfwidth.json
@@ -33,7 +36,7 @@ import os
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 PC98_MAP = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
 LIGHT_HANGUL = os.path.join(ROOT, "build", "light_hangul.json")
 HALFWIDTH_MAP = os.path.join(ROOT, "tools", "pc98_halfwidth_map.json")

@@ -2,7 +2,9 @@
 result as tools/pc98_hangul_map.json, the authoritative reference used when
 drawing the Light-weight Hangul.
 
-Source bitmap: ../gensei-pc98/docs/bios/font.bmp (2048x2048, 1bpp, 16px grid).
+Source bitmap: original/pc98_font.bmp (2048x2048, 1bpp, 16px grid) -- a
+read-only copy of gensei-pc98's font.bmp as it stood before any of our own
+Hangul was ever delivered into it (see docs/ROADMAP.md).
 It carries the 2,350 KS X 1001 완성형 Hangul in a 25-col x 94-row block, packed
 COLUMN-MAJOR in EUC-KR order:
 
@@ -19,7 +21,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 OUT = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
 
 COL0, ROW0, ROWS = 16, 33, 94  # block origin (cell coords) and column height

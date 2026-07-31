@@ -278,7 +278,7 @@ def text_grids(weight, s):
 
 
 _PC98 = None  # lazy (PIL pixel access, {syllable: [col, row]})
-PC98_BMP = os.path.join(ROOT, "..", "gensei-pc98", "docs", "bios", "font.bmp")
+PC98_BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 PC98_MAP = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
 
 
@@ -688,8 +688,10 @@ def _is_kana(ch):
 
 
 # Symbol/punctuation reference: DKBDinaru (~/Library/Fonts/DKBDinaru.ttf), a
-# 16-unitsPerEm pixel-native Dokkaebi-Dinaru-lineage font -- same family this
-# whole project descends from, so its default shapes already read as "ours."
+# 16-unitsPerEm pixel-native font -- and per its own name table, literally
+# Juwan Park's "Dokkaebi Dinaru" revival (docs/PROVENANCE.md's "기존 복원
+# 프로젝트"), independently made from the same source bitmap this whole
+# project descends from. So its default shapes already read as "ours."
 # Replaced two earlier tries: GNU Unifont's glyphs were too rough/misaligned
 # to trace from, and STHeiti Light (a macOS system CJK text face) rendered
 # clean but is proportional, not cell-native, so common ASCII symbols like
@@ -936,11 +938,13 @@ BUILD_TARGETS = {
     "regular": {
         "ufo": "build/DokkaebiDNRGothic-Bold.ufo",
         "ttf": "build/DokkaebiDNRGothic-Bold.ttf",
+        "otf": "build/DokkaebiDNRGothic-Bold.otf",
         "build_args": ["--all"],
     },
     "light": {
         "ufo": "build/DokkaebiDNRGothic-Regular.ufo",
         "ttf": "build/DokkaebiDNRGothic-Regular.ttf",
+        "otf": "build/DokkaebiDNRGothic-Regular.otf",
         "build_args": ["--weight", "light"],
     },
 }
@@ -949,12 +953,21 @@ BUILD_TARGETS = {
 def run_build(weight):
     target = BUILD_TARGETS.get(weight, BUILD_TARGETS["regular"])
     py = sys.executable
+    # Deliberately does NOT re-freeze the component library first. A syllable
+    # you just drew already reaches the font verbatim (hand-drawn always wins
+    # over composition), so the build is correct without it. Re-freezing would
+    # only change the COMPOSED syllables -- and doing that silently on every
+    # build would quietly replace a library that was pinned on purpose. Run
+    # compose_components.py --freeze by hand when that's what you want.
     steps = [
         [py, "scripts/build_ufo.py", *target["build_args"], "--proportional",
          "--out", target["ufo"]],
-        [py, "-m", "fontmake", "-u", target["ufo"],
-         "-o", "ttf", "--output-path", target["ttf"]],
-        [py, "scripts/finalize.py", target["ttf"]],
+        [py, "-m", "fontmake", "-u", target["ufo"], "-o", "ttf", "otf",
+         "--output-dir", os.path.dirname(target["ttf"])],
+        [py, "scripts/finalize.py", target["ttf"], target["otf"]],
+        # WOFF2 last, from the OTF finalize just wrote -- see build_webfont.py
+        # for why OTF (not TTF) is the web source.
+        [py, "scripts/build_webfont.py", target["otf"]],
     ]
     out = []
     for cmd in steps:

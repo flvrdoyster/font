@@ -26,7 +26,6 @@ sys.path.insert(0, "tools")
 import pixelfont as pf
 import customglyphs as cg
 import compose_components as cc
-import compose_light as cl
 import spacing as sp
 import build_ufo as bu   # sibling script; scripts/ is sys.path[0] when run directly
 
@@ -89,10 +88,12 @@ def expected_bold():
 def expected_light():
     """cp -> (width, rows), Hangul only: glyphs_light.json hand-drawn wins,
     compose_components fills the rest -- mirrors build_ufo.py's
-    build_light() Hangul loop exactly."""
-    pc98 = cl.load_pc98()
+    build_light() Hangul loop exactly, including reading the FROZEN component
+    library rather than re-extracting. Re-extracting here would test the build
+    against a different library than it was built from and report every
+    difference as a font defect (it did: 460 fake mismatches)."""
     corpus = cc.load_corpus()
-    lib = cc.build_library(corpus, pc98, cc.build_zone_indices(corpus, pc98))
+    lib = cc.load_library()
     out = {}
     for ch in cc.FULL:
         grid = corpus.get(ch) or cc.compose(ch, lib)
