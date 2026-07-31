@@ -744,8 +744,7 @@ def _is_kana(ch):
 
 # Symbol/punctuation reference: DKBDinaru (~/Library/Fonts/DKBDinaru.ttf), a
 # 16-unitsPerEm pixel-native font -- and per its own name table, literally
-# Juwan Park's "Dokkaebi Dinaru" revival (docs/PROVENANCE.md's "기존 복원
-# 프로젝트"), independently made from the same source bitmap this whole
+# Juwan Park's "Dokkaebi Dinaru" revival, independently made from the same source bitmap this whole
 # project descends from. So its default shapes already read as "ours."
 # Replaced two earlier tries: GNU Unifont's glyphs were too rough/misaligned
 # to trace from, and STHeiti Light (a macOS system CJK text face) rendered

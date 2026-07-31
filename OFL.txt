@@ -4,7 +4,7 @@ Portions of this font are derived from the "Dokkaebi Dinaru" 16x16 bitmap
 font used in the Hangul Dokkaebi (DKBB) DOS Hangul software (source publicly
 released, 1989). The original bitmap's authorship and license are undetermined;
 Korean case law does not extend copyright to typeface designs (glyph shapes),
-and this font is a newly drawn vector work. See docs/PROVENANCE.md.
+and this font is a newly drawn vector work.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
