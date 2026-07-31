@@ -24,10 +24,10 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              for the editor's full-coverage Light palette.
   GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
                              list), for the editor's kana palette (Phase 3).
-  GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from GNU
-                             Unifont (refs/unifont.otf, gitignored) -- native
-                             16x16 pixel design, full BMP coverage. Overlay
-                             only; never embedded in built output.
+  GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from
+                             DKBDinaru (~/Library/Fonts/DKBDinaru.ttf, local
+                             machine only) -- native 16x16 pixel design.
+                             Overlay only; never embedded in built output.
   GET  /api/cells         -> jamo-component cells for the 11,172 expansion
                              (scripts/compose_components.py): status, sample
                              counts, affected-syllable counts, and a suggested
@@ -687,40 +687,55 @@ def _is_kana(ch):
     return (0x3041 <= ord(ch) <= 0x30FF) or (0xFF61 <= ord(ch) <= 0xFF9F)
 
 
-# Symbol/punctuation reference: GNU Unifont (refs/unifont.otf, gitignored like
-# the other refs). Picked because it is drawn natively on a 16x16 pixel grid --
-# the same cell we use -- so it needs no rescaling, and it covers the whole BMP,
-# so every symbol tier resolves (MS Gothic, our kana reference, turned out to be
-# a JIS subset with no Latin-1/currency/dashes at all). Reference only: shapes
-# are looked at and redrawn by hand, never copied, same as every other ref here.
-UNIFONT_TTF = os.path.join(ROOT, "refs", "unifont.otf")
-UNIFONT_PX = 16
-# Unifont's own baseline sits at row 14 of its 16-row cell; ours sits at row 13
-# (editor guide), so text glyphs shift up by one. Cell-filling glyphs (box
+# Symbol/punctuation reference: DKBDinaru (~/Library/Fonts/DKBDinaru.ttf), a
+# 16-unitsPerEm pixel-native Dokkaebi-Dinaru-lineage font -- same family this
+# whole project descends from, so its default shapes already read as "ours."
+# Replaced two earlier tries: GNU Unifont's glyphs were too rough/misaligned
+# to trace from, and STHeiti Light (a macOS system CJK text face) rendered
+# clean but is proportional, not cell-native, so common ASCII symbols like
+# '#'/'%'/'@' overflowed the 8px halfwidth cell and got clipped. DKBDinaru's
+# own advances are already clean 8/16, so nothing overflows. It's a personal,
+# local-machine file (not vendored in the repo like the other refs, same
+# situation Unifont/STHeiti were in) -- covers everything but a handful of
+# rare marks (¯–—⁄‹›−∆℮ at last count; those overlay blank, same as any
+# other unmapped codepoint). Reference only: shapes are looked at and
+# redrawn by hand, never copied, same as every other ref here.
+DINARU_TTF = os.path.join(os.path.expanduser("~"), "Library", "Fonts", "DKBDinaru.ttf")
+REF_PX = 16
+# The font's own baseline sits at row 14 of its 16-row cell; ours sits at row
+# 13 (editor guide), so text glyphs shift up by one. Cell-filling glyphs (box
 # drawing, block elements) are the exception -- they must span 0..15 edge to
 # edge so runs connect, which is exactly how the original bitmap draws them
-# (verified: '┼' spans all 16 rows with its bar on row 7, same as Unifont).
-UNIFONT_BASELINE_ROW = 13
-_UNIFONT = None
+# (verified: '┼' spans all 16 rows with its bar on row 7).
+REF_BASELINE_ROW = 13
+_DINARU = False   # False = not yet tried, None = load failed, else the face
 
 
-def _unifont():
-    global _UNIFONT
-    if _UNIFONT is None:
-        import freetype
-        face = freetype.Face(UNIFONT_TTF)
-        face.set_pixel_sizes(0, UNIFONT_PX)
-        _UNIFONT = face
-    return _UNIFONT
+def _dinaru():
+    global _DINARU
+    if _DINARU is False:
+        try:
+            import freetype
+            face = freetype.Face(DINARU_TTF)
+            face.set_pixel_sizes(0, REF_PX)
+            _DINARU = face
+        except Exception:
+            _DINARU = None
+    return _DINARU
 
 
-def _unifont_grid(ch):
+def _ref_width(cp):
+    """8 for halfwidth ASCII/kana-jamo, 16 otherwise -- matches the editor's
+    own widthFor() so the overlay lines up with the canvas it's drawn under,
+    independent of whatever advance width the reference font itself uses."""
+    if 0x20 <= cp <= 0x7E or 0xFF61 <= cp <= 0xFFDC:
+        return 8
+    return 16
+
+
+def _face_grid(face, ch):
     import freetype
-    try:
-        face = _unifont()
-    except Exception:
-        return None
-    if face.get_char_index(ord(ch)) == 0:
+    if face is None or face.get_char_index(ord(ch)) == 0:
         return None  # unmapped -- would render .notdef
     try:
         face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_TARGET_MONO)
@@ -730,34 +745,39 @@ def _unifont_grid(ch):
     bmp = slot.bitmap
     if bmp.width == 0 or bmp.rows == 0:
         return None  # blank (space and friends)
-    # Grid width follows Unifont's own advance: 8 for halfwidth symbols/Latin,
-    # 16 for fullwidth/CJK. The editor centers a narrower grid on a wider canvas.
-    grid_w = max(1, min(16, slot.advance.x // 64 or bmp.width))
-    grid = [["."] * grid_w for _ in range(16)]
+    grid_w = _ref_width(ord(ch))
     # Box drawing (U+2500-257F) and block elements (U+2580-259F) are cell
-    # glyphs, not text: they tile edge to edge, so they keep Unifont's own
-    # cell placement (its baseline is row 14) rather than being re-seated on
-    # our text baseline -- otherwise '─' lands a row above '┼''s crossbar and
+    # glyphs, not text: they tile edge to edge, so they keep the font's own
+    # cell placement (baseline row 14) rather than being re-seated on our
+    # text baseline -- otherwise '─' lands a row above '┼''s crossbar and
     # runs stop connecting.
     cell_glyph = 0x2500 <= ord(ch) <= 0x259F
-    dy = (14 - slot.bitmap_top) if cell_glyph else (UNIFONT_BASELINE_ROW - slot.bitmap_top)
+    dy = (14 - slot.bitmap_top) if cell_glyph else (REF_BASELINE_ROW - slot.bitmap_top)
+    # DKBDinaru's own advances are already clean 8/16 (unlike a proportional
+    # text face), so this shouldn't trigger -- kept as a guard so a glyph
+    # that somehow doesn't fit is dropped instead of silently clipped.
+    if slot.bitmap_left < 0 or slot.bitmap_left + bmp.width > grid_w:
+        return None
+    if dy < 0 or dy + bmp.rows > 16:
+        return None
+    grid = [["."] * grid_w for _ in range(16)]
     for y in range(bmp.rows):
         gy = dy + y
-        if not (0 <= gy < 16):
-            continue
         for x in range(bmp.width):
             gx = slot.bitmap_left + x
-            if not (0 <= gx < grid_w):
-                continue
             if (bmp.buffer[y * bmp.pitch + x // 8] >> (7 - (x % 8))) & 1:
                 grid[gy][gx] = "#"
     return ["".join(row) for row in grid]
 
 
+def _symbol_ref_grid(ch):
+    return _face_grid(_dinaru(), ch)
+
+
 def sym_ref_grids(s):
-    """Per-char pixel grids from GNU Unifont -- the symbol/punctuation
-    reference overlay. Reference only, never embedded in built output."""
-    return [{"ch": ch, "rows": _unifont_grid(ch)} for ch in s]
+    """Per-char pixel grids from the symbol/punctuation reference overlay
+    (DKBDinaru). Reference only, never embedded in built output."""
+    return [{"ch": ch, "rows": _symbol_ref_grid(ch)} for ch in s]
 
 
 def kana_chars():

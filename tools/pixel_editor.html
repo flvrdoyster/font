@@ -347,7 +347,7 @@
     ["ascii-half", "ASCII 기호 (반각)", ASCII_PUNCT],
     ["ascii-full", "전각 기호", Array.from(ASCII_PUNCT).map(toFullwidthAny).join("")],
     ["latin1", "Latin-1 기호", "¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷"],
-    ["dash", "문장부호 · 대시", "–—―…·‥•※†‡‰′″⁄"],
+    ["dash", "문장부호 · 대시", "–—―…·‥•※†‡‰′″⁄、。〃"],
     ["quote", "따옴표", "“”‘’„‚«»‹›"],
     ["currency", "통화기호", "€₩￦£¥¢¤"],
     ["math", "수학 · 기호", "−±×÷≠≤≥≈∞√∑∏∫∂∇∆◊°µΩ"],
@@ -492,7 +492,7 @@
   //    Regular tab for Hangul, the original Bold skeleton to thin down from.
   //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
   //    CURRENT weight, so a similar already-drawn glyph can be traced against.
-  //  - blue (#ghostSym, --guide): GNU Unifont, for symbols/punctuation only
+  //  - blue (#ghostSym, --guide): DKBDinaru, for symbols/punctuation only
   //    (see /api/symref). Shape reference; still redrawn by hand.
   function isKana(ch) {
     const c = ch.codePointAt(0);
@@ -502,7 +502,7 @@
     const c = ch.codePointAt(0);
     return (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3130 && c <= 0x318F);
   }
-  // Everything that isn't Hangul/kana gets the Unifont reference: Latin,
+  // Everything that isn't Hangul/kana gets the DKBDinaru reference: Latin,
   // digits, punctuation, currency, math, arrows, box drawing, blocks, shapes.
   function isSymRef(ch) { return !isKana(ch) && !isHangul(ch); }
   // One fetch for all three reference sources -- they differ only in URL.
