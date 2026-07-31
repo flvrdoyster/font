@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>도깨비DNR 고딕</title>
 <style>
   @font-face {
@@ -14,17 +15,93 @@
     src: url("DokkaebiDNRGothic-Bold.woff2") format("woff2");
     font-weight: 700;
   }
-  body { font-family: "Dokkaebi DNR Gothic", monospace; background: #111; color: #eee;
-         padding: 40px; font-size: 32px; line-height: 1.6; }
-  .bold { font-weight: 700; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #111; color: #eee;
+    margin: 0; padding: 32px 24px 48px;
+  }
+  h1 {
+    font-family: "Dokkaebi DNR Gothic", monospace;
+    font-size: 28px; font-weight: 400; margin: 0 0 24px;
+  }
+  .panel {
+    max-width: 900px; margin: 0 auto;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+    margin-bottom: 16px; font-size: 14px; color: #aaa;
+  }
+  .seg { display: inline-flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+  .seg button {
+    font: inherit; color: #ccc; background: #1c1c1c; border: none;
+    padding: 6px 16px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid #444; }
+  .seg button[aria-pressed="true"] { background: #3a5a8c; color: #fff; }
+  .size-row { display: flex; align-items: center; gap: 8px; }
+  .size-row input[type="range"] { width: 140px; }
+  #sizeLabel { min-width: 4ch; color: #eee; }
+  textarea {
+    display: block; width: 100%; min-height: 220px;
+    background: #1a1a1a; color: #eee;
+    border: 1px solid #333; border-radius: 8px;
+    padding: 20px; margin: 0 0 12px;
+    font-family: "Dokkaebi DNR Gothic", monospace;
+    line-height: 1.6; resize: vertical;
+  }
+  .hint { font-size: 13px; color: #777; }
   code { color: #8ab4f8; }
 </style>
 </head>
 <body>
-<p>도깨비DNR 고딕 — 가나다라 ABCDEFG 0123456789</p>
-<p class="bold">도깨비DNR 고딕 (Bold) — 가나다라 ABCDEFG 0123456789</p>
-<p style="font-size: 16px; color: #999;">
-  <code>@font-face { src: url("DokkaebiDNRGothic-Regular.woff2") format("woff2"); }</code>
-</p>
+<div class="panel">
+  <h1>도깨비DNR 고딕 / Dokkaebi DNR Gothic</h1>
+
+  <div class="controls">
+    <div class="seg" id="weightSeg">
+      <button type="button" data-weight="400" aria-pressed="true">Regular</button>
+      <button type="button" data-weight="700" aria-pressed="false">Bold</button>
+    </div>
+    <div class="size-row">
+      <label for="sizeRange">크기</label>
+      <input type="range" id="sizeRange" min="12" max="96" step="1" value="32">
+      <span id="sizeLabel">32px</span>
+    </div>
+  </div>
+
+  <textarea id="tester" spellcheck="false">도깨비DNR 고딕 — 가나다라 ABCDEFG 0123456789</textarea>
+  <p class="hint">위 칸에 직접 타이핑해서 확인하세요. 웨이트·크기는 위 컨트롤로 바꿉니다.</p>
+
+  <p class="hint" style="margin-top: 32px;">
+    <code>@font-face { src: url("DokkaebiDNRGothic-Regular.woff2") format("woff2"); }</code>
+  </p>
+</div>
+
+<script>
+  const textarea = document.getElementById("tester");
+  const sizeRange = document.getElementById("sizeRange");
+  const sizeLabel = document.getElementById("sizeLabel");
+  const weightSeg = document.getElementById("weightSeg");
+
+  function applySize(px) {
+    textarea.style.fontSize = px + "px";
+    sizeLabel.textContent = px + "px";
+  }
+  function applyWeight(w) {
+    textarea.style.fontWeight = w;
+    for (const btn of weightSeg.querySelectorAll("button"))
+      btn.setAttribute("aria-pressed", btn.dataset.weight === String(w));
+  }
+
+  sizeRange.addEventListener("input", () => applySize(sizeRange.value));
+  weightSeg.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-weight]");
+    if (btn) applyWeight(btn.dataset.weight);
+  });
+
+  applySize(sizeRange.value);
+  applyWeight(400);
+</script>
 </body>
 </html>
