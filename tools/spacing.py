@@ -50,4 +50,5 @@ def _is_fullwidth(cp):
             or 0x1100 <= cp <= 0x11FF     # Hangul Jamo
             or 0x3130 <= cp <= 0x318F     # compat Jamo
             or 0x3040 <= cp <= 0x30FF     # kana
+            or 0x4E00 <= cp <= 0x9FFF     # kanji (CJK Unified Ideographs)
             or 0xFF00 <= cp <= 0xFFEF)    # fullwidth forms

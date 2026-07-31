@@ -35,6 +35,29 @@ ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
 DESCENDER = 0
 CAP = 12 * pf.PX     # rough, informational
 
+KANJI_BMP = os.path.join("original", "pc98_jp.bmp")
+KANJI_MAP = os.path.join("tools", "pc98_kanji_map.json")
+
+
+def load_kanji():
+    """{codepoint: (16, [16 row bitmasks])} for the 6,356 JIS X 0208 kanji,
+    read verbatim from the genuine Japanese PC-98 BIOS font (original/
+    pc98_jp.bmp -- see scripts/pc98_kanji_map.py). Used as-is, identically
+    for both weights: unlike everything else here, kanji isn't redrawn or
+    weight-adjusted, just included (see docs/ROADMAP.md)."""
+    from PIL import Image
+    px = Image.open(KANJI_BMP).convert("L").load()
+    with open(KANJI_MAP, encoding="utf-8") as f:
+        cells = json.load(f)["cells"]
+    out = {}
+    for ch, (col, row) in cells.items():
+        x0, y0 = col * 16, row * 16
+        rows = [sum((1 << (15 - x)) for x in range(16) if px[x0 + x, y0 + y] < 128)
+                for y in range(16)]
+        if any(rows):
+            out[ord(ch)] = (16, rows)
+    return out
+
 # The original bitmap's cmap carries a few codepoints that shouldn't ship:
 # C0/C1 control characters with leftover ink from the legacy code page (a
 # rendering bug -- fontbakery whitespace_ink/control_chars), and soft hyphen
@@ -155,21 +178,26 @@ def build(chars=None, all_glyphs=False, proportional=False, exclude_kana=False):
             continue
         if exclude_kana and _is_kana(cp):
             continue
-        if proportional:
-            adv_px, shift_px = sp.proportional(width_px, rows, cp)
-        else:
-            adv_px, shift_px = (width_px if width_px else 8), 0
-        glyph = Glyph(name=f"uni{cp:04X}")
-        glyph.width = adv_px * pf.PX
-        glyph.unicodes = [cp]
-        contours = pf.pixels_to_contours(width_px, rows)
-        if shift_px:
-            dx = shift_px * pf.PX
-            contours = [[(x + dx, y) for x, y in c] for c in contours]
-        _draw(glyph, contours)
-        ufo.addGlyph(glyph)
+        _add_verbatim(ufo, cp, width_px, rows, proportional)
+        seen_cps.add(cp)
         added += 1
         extra += 1
+
+    # Kanji: used as-is, verbatim from the genuine PC-98 font, identically for
+    # both weights -- no hand-drawn override to check against (none exist),
+    # but still deferring to one if it ever shows up costs nothing.
+    kanji = 0
+    for cp, (width_px, rows) in load_kanji().items():
+        if cp in seen_cps or cp in cg.GLYPHS:
+            continue
+        if wanted_cps is not None and cp not in wanted_cps:
+            continue
+        _add_verbatim(ufo, cp, width_px, rows, proportional)
+        seen_cps.add(cp)
+        added += 1
+        kanji += 1
+    if kanji:
+        print(f"  +{kanji} kanji (verbatim, original/pc98_jp.bmp)")
 
     if skipped_control or skipped_blank:
         print(f"  skipped {skipped_control} control-char/soft-hyphen codepoints, "
@@ -238,8 +266,17 @@ def build_light(proportional=False, exclude_kana=False):
         print(f"  light: {missing}/{len(cc.FULL)} Hangul skipped "
               f"(missing component cells): {skipped}...")
 
+    # Kanji: used as-is, verbatim, identically to the Bold member -- no
+    # thin_vertical, no hand redesign (see docs/ROADMAP.md). A hand-drawn
+    # entry would still win if one ever shows up in glyphs_light.json; none
+    # do today.
+    light_kanji = {}
+    for cp, (width_px, rows) in load_kanji().items():
+        ch = chr(cp)
+        light_kanji[cp] = cg._to_rows(refs[ch]) if ch in refs else (width_px, rows)
+
     added = 0
-    for cp, (width_px, rows) in {**light_latin, **light_hangul}.items():
+    for cp, (width_px, rows) in {**light_latin, **light_hangul, **light_kanji}.items():
         adv_px, shift_px = (sp.proportional(width_px, rows, cp) if proportional
                             else ((width_px if width_px else 8), 0))
         glyph = Glyph(name=f"uni{cp:04X}")
@@ -255,7 +292,8 @@ def build_light(proportional=False, exclude_kana=False):
 
     print(f"  light: {added} glyphs added "
           f"({latin_hand} Latin/numbers hand-drawn + {latin_thinned} thinned, "
-          f"{hand} Hangul hand-drawn + {gaps} composed)")
+          f"{hand} Hangul hand-drawn + {gaps} composed, "
+          f"{len(light_kanji)} kanji verbatim)")
     return ufo
 
 
@@ -268,6 +306,25 @@ def _draw(glyph, contours):
         for pt in contour[1:]:
             pen.lineTo(pt)
         pen.closePath()
+
+
+def _add_verbatim(ufo, cp, width_px, rows, proportional):
+    """Add a uniXXXX-named glyph straight from pixel rows -- shared by
+    build()'s beyond-original-strike pass and its kanji pass, which are
+    otherwise identical."""
+    if proportional:
+        adv_px, shift_px = sp.proportional(width_px, rows, cp)
+    else:
+        adv_px, shift_px = (width_px if width_px else 8), 0
+    glyph = Glyph(name=f"uni{cp:04X}")
+    glyph.width = adv_px * pf.PX
+    glyph.unicodes = [cp]
+    contours = pf.pixels_to_contours(width_px, rows)
+    if shift_px:
+        dx = shift_px * pf.PX
+        contours = [[(x + dx, y) for x, y in c] for c in contours]
+    _draw(glyph, contours)
+    ufo.addGlyph(glyph)
 
 
 def _add_notdef(ufo):
