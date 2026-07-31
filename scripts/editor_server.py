@@ -24,6 +24,12 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              for the editor's full-coverage Light palette.
   GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
                              list), for the editor's kana palette (Phase 3).
+  GET  /api/kanaref?s=..  -> reference grids for kana, from the genuine
+                             (unlocalized) Japanese PC-98 BIOS font
+                             (original/pc98_jp.bmp, a different ROM dump than
+                             the Korean-localized pc98_font.bmp everything
+                             else here reads) -- see docs/ROADMAP.md. Overlay
+                             only; never embedded in built output.
   GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from
                              DKBDinaru (~/Library/Fonts/DKBDinaru.ttf, local
                              machine only) -- native 16x16 pixel design.
@@ -330,6 +336,43 @@ def _pc98_kana():
 def _pc98_kana_grid(ch):
     try:
         px, cells = _pc98_kana()
+    except Exception:
+        return None
+    cell = cells.get(ch)
+    if not cell:
+        return None
+    col, row = cell
+    x0, y0 = col * 16, row * 16
+    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
+            for y in range(16)]
+
+
+# Genuine (unlocalized) Japanese PC-98 BIOS font -- original/pc98_jp.bmp, a
+# different ROM dump than pc98_font.bmp (the Korean-localized one everything
+# else here reads). Reference only, for the editor's kana overlay: measured
+# against our own kana, this one's ink runs noticeably wider (right edge as
+# far as col 15; ours never passes col 13) -- see docs/ROADMAP.md. Same
+# col/row layout as the Korean ROM's kana block, confirmed directly (같은
+# tools/pc98_kana_map.json coordinates land on あ/ア in both), so it reuses
+# that map rather than needing its own.
+PC98_JP_BMP = os.path.join(ROOT, "original", "pc98_jp.bmp")
+_PC98_JP = None
+
+
+def _pc98_jp():
+    global _PC98_JP
+    if _PC98_JP is None:
+        from PIL import Image
+        img = Image.open(PC98_JP_BMP).convert("L")
+        with open(PC98_KANA_MAP, encoding="utf-8") as f:
+            cells = json.load(f)["cells"]
+        _PC98_JP = (img.load(), cells)
+    return _PC98_JP
+
+
+def _pc98_jp_kana_grid(ch):
+    try:
+        px, cells = _pc98_jp()
     except Exception:
         return None
     cell = cells.get(ch)
@@ -859,6 +902,11 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/kana":
             return self._send(200, json.dumps({"chars": kana_chars()},
                                               ensure_ascii=False))
+        if parsed.path == "/api/kanaref":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps(
+                {"chars": [{"ch": ch, "rows": _pc98_jp_kana_grid(ch)} for ch in s]},
+                ensure_ascii=False))
         if parsed.path in ("/components", "/components.html", "/components/"):
             # The component-cell editor is now the main editor's 부품 셀 palette
             # tab -- its drawing half was a duplicate of that editor's. Kept as

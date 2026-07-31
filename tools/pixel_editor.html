@@ -4,7 +4,7 @@
   /* Page-specific only -- shared colour tokens, .app/.topbar/.card/.btn/
      .status/.toast live in editor.css (see that file's header comment). */
   :root {
-    --guide: #2f78ab; --guide2: #9333c9;
+    --guide: #2f78ab; --guide2: #9333c9; --guide3: #2f8c4e;
   }
 
   .wtab { font: inherit; font-size: 13px; font-weight: 600; padding: 5px 12px;
@@ -64,6 +64,7 @@
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
   .ghost-sym { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
   .ghost-ref2 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
+  .ghost-kana { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -190,6 +191,7 @@
           <canvas class="ghost" id="ghost"></canvas>
           <canvas class="ghost-sym" id="ghostSym"></canvas>
           <canvas class="ghost-ref2" id="ghostRef2"></canvas>
+          <canvas class="ghost-kana" id="ghostKana"></canvas>
           <div class="guides" id="guides"></div>
         </div>
       </div>
@@ -485,7 +487,7 @@
   }
 
   // ---- ghost overlays ----
-  // Three overlays, all gated by the 참조 오버레이 toggle:
+  // Four overlays, all gated by the 참조 오버레이 toggle:
   //  - #ghost (--ink): the other weight of the SAME character, whichever one
   //    is the reference for what you're drawing. On the Bold tab for kana,
   //    the confirmed Light glyph, to thicken 1px -> 2px against; on the
@@ -494,6 +496,10 @@
   //    CURRENT weight, so a similar already-drawn glyph can be traced against.
   //  - blue (#ghostSym, --guide): DKBDinaru, for symbols/punctuation only
   //    (see /api/symref). Shape reference; still redrawn by hand.
+  //  - green (#ghostKana, --guide3): kana only, from the genuine Japanese
+  //    PC-98 BIOS font (see /api/kanaref) -- measured wider ink than ours
+  //    (right edge reaches col 15; ours never passes col 13), the likely
+  //    source of the uneven-spacing feedback. Shape/spacing reference only.
   function isKana(ch) {
     const c = ch.codePointAt(0);
     return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
@@ -528,6 +534,7 @@
   const lightRef = refFetcher(refText("light"));
   const boldRef = refFetcher(refText("regular"));
   const symRef = refFetcher(ch => "api/symref?s=" + encodeURIComponent(ch));
+  const kanaJpRef = refFetcher(ch => "api/kanaref?s=" + encodeURIComponent(ch));
   function paintGhost(cv, rows, colorVar) {
     const px = 22;
     cv.width = W * px; cv.height = H * px;
@@ -555,6 +562,11 @@
     paintGhost(document.getElementById("ghost"), rows, "--ink");
     drawSymGhost();
     drawRefGhost();
+    drawKanaGhost();
+  }
+  function drawKanaGhost() {
+    const rows = ghostOn && isKana(curChar) ? kanaJpRef(curChar) : null;
+    paintGhost(document.getElementById("ghostKana"), rows, "--guide3");
   }
   function drawSymGhost() {
     const rows = ghostOn && isSymRef(curChar) ? symRef(curChar) : null;
