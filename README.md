@@ -14,9 +14,9 @@ Bold(2px)** 로 묶여 나오므로, 앱에서 볼드를 걸면(Cmd+B 등) 두�
 
 - 원본: `도깨비 디나루`(파일명 `HANKBC.HAN`), 한글도깨비(DKBB) DOS 소프트웨어 계열의 16×16 비트맵
 - 목표 산출물: Regular(1px)·Bold(2px) 한 패밀리 서체 + gensei-pc98용 한글 `font.bmp`
-- 커버리지: Bold(2px)는 한글 11,172자 전부, Regular(1px)는 완성형 2,350자(KS X 1001).
-  둘 다 라틴·가나·키릴·그리스·기호 포함, 한자 없음. Regular를 11,172자로 넓히는
-  작업이 진행 중이다 — [docs/ROADMAP.md](docs/ROADMAP.md) 참고
+- 커버리지: Bold(2px)·Regular(1px) 둘 다 한글 11,172자 전부. 손그림 4,101자가
+  우선이고 나머지는 자모 부품 조합으로 채운다 — [docs/ROADMAP.md](docs/ROADMAP.md)
+  참고. 둘 다 라틴·가나·키릴·그리스·기호 포함, 한자 없음
 - 라이선스: SIL Open Font License 1.1, 예약 글꼴 이름 `Dokkaebi DNR` — [OFL.txt](OFL.txt)
 - 변환 방식: 픽셀을 64×64 유닛 정사각형으로 보고 인접 픽셀의 공유 변을 상쇄해 병합
   폴리곤을 만든다. 곡선 트레이싱을 쓰지 않으므로 확대해도 계단이 그대로 보존된다.
@@ -60,6 +60,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
 
 .venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic-Bold.ttf
+.venv/bin/python scripts/verify_ttf.py build/DokkaebiDNRGothic-Regular.ttf
 .venv/bin/python scripts/coverage_report.py build/DokkaebiDNRGothic-Bold.ttf
 ```
 
@@ -83,6 +84,8 @@ Regular를 11,172자로 넓히는 작업은 팔레트의 **부품 셀** 탭에�
 ```bash
 .venv/bin/python scripts/compose_components.py --coverage   # 조합 가능률
 .venv/bin/python scripts/compose_components.py --missing    # 그려야 할 셀
+.venv/bin/python scripts/compose_components.py --blobs      # 3x3 덩어리 남은 음절
+.venv/bin/python scripts/compose_components.py --cellreview # 부품 1,156칸 전수 눈검수용 PNG
 .venv/bin/python scripts/compose_components.py --build      # 검토용 11,172자 출력
 ```
 

@@ -89,23 +89,49 @@ def load_pc98():
     return grid
 
 
-def jong_zone(target, pc98):
-    """Pixels that move when only the 종성 varies (초성·중성 fixed) = the
-    batchim area. 종성 ranges over non-empty values only, so the block type
-    stays *C and the 초성 position doesn't shift into the zone."""
-    cho, jung, _ = decompose(target)
-    grids = []
-    for jong in JONG[1:]:
-        g = pc98(compose_ch(cho, jung, jong))
-        if g is not None:
-            grids.append(g)
+def _jong_diff(grids):
     zone = set()
     if len(grids) >= 2:
         for y in range(16):
             for x in range(16):
-                vals = {g[y][x] for g in grids}
-                if len(vals) > 1:
+                if len({g[y][x] for g in grids}) > 1:
                     zone.add((y, x))
+    return zone
+
+
+def _jong_grids(cho, jung, pc98):
+    return [g for jong in JONG[1:]
+            for g in [pc98(compose_ch(cho, jung, jong))] if g is not None]
+
+
+def jong_zone(target, pc98):
+    """Pixels that move when only the 종성 varies (초성·중성 fixed) = the
+    batchim area. 종성 ranges over non-empty values only, so the block type
+    stays *C and the 초성 position doesn't shift into the zone.
+
+    ㅒ/ㅖ/ㅢ (and other rare 중성) have so few 받침 syllables in PC-98 -- often
+    just 2 -- that a real batchim row can go undetected: if those 2 samples
+    happen to draw identically at some row (common, since batchim shapes share
+    a stem+bottom-bar template), the diff sees no variance there and misreads
+    the row as vowel ink. 걘/걜 (ㄱ+ㅒ+ㄴ/ㄹ) is the case that surfaced this --
+    both draw the same at rows 12-13, so those rows leaked into the vowel zone
+    and every ㅒ/ㅖ/ㅢ 받침 cell came out rejected (LV_FLOOR sees vowel ink
+    below row 9 that never existed).
+
+    Below 4 own samples, pool in the same diff from other 중성 in the same
+    vgroup (batchim position tracks V/H/X width class, not the exact vowel) to
+    outvote the coincidence. Left alone above the threshold: pooling well-served
+    중성 too costs real regressions (measured), since siblings' 초성 redraws
+    aren't pixel-identical even within a vgroup."""
+    cho, jung, _ = decompose(target)
+    own = _jong_grids(cho, jung, pc98)
+    if len(own) >= 4:
+        return _jong_diff(own)
+    vg = vgroup(jung)
+    zone = _jong_diff(own)
+    for jg in JUNG:
+        if jg != jung and vgroup(jg) == vg:
+            zone |= _jong_diff(_jong_grids(cho, jg, pc98))
     return zone
 
 

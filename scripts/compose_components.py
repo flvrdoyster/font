@@ -80,6 +80,7 @@ CORPUS = os.path.join(ROOT, "tools", "glyphs_light.json")
 FULL = [chr(c) for c in range(0xAC00, 0xD7A4)]              # all 11,172
 FULL_OUT = os.path.join(ROOT, "build", "light_hangul_full.json")
 FULL_SPECIMEN = os.path.join(ROOT, "build", "light_hangul_full_specimen.png")
+CELL_SPECIMEN = os.path.join(ROOT, "build", "cell_review_specimen.png")
 
 
 # ---- cells ------------------------------------------------------------------
@@ -310,6 +311,65 @@ def compose(ch, lib):
             for y in range(16)]
 
 
+def has_blob(rows):
+    """A filled 3x3 block. Zero of these in 2,669 hand-drawn glyphs -- any
+    composed syllable with one is unconditionally a modeling defect, not a
+    style choice (see docs/ROADMAP.md)."""
+    return any(all(rows[yy][xx] == "#" for yy in range(y, y + 3) for xx in range(x, x + 3))
+               for y in range(14) for x in range(14))
+
+
+def blob_chars(corpus, lib):
+    """Composed (never hand-drawn) syllables whose output still has a blob --
+    candidates to hand-draw and let the corpus override the composition."""
+    return sorted(ch for ch in FULL if ch not in corpus
+                  and (out := compose(ch, lib)) and has_blob(out))
+
+
+def cell_review_chars(corpus, lib):
+    """One composed (never hand-drawn) syllable per LV/T cell -- every
+    component the library can produce, in one legible-sized pass instead of
+    all 7,000+ composed syllables. A cell used only by already-hand-drawn
+    syllables has no composed sample and is skipped (nothing to review: what
+    ships for it is the verbatim drawing, not this model).
+
+    Complements has_blob: that catches shapes proven impossible, this is a
+    plain eyeball pass for the "looks wrong but is technically valid" cases
+    no automated rule can define (measured and dropped two candidates for
+    that job -- isolated single pixels and outlier connected-component counts
+    both occur naturally in confirmed hand-drawn syllables, so neither is a
+    valid never-happens signal)."""
+    by_cell = {}
+    for ch in FULL:
+        if ch in corpus:
+            continue
+        for cell in cells_for(ch):
+            by_cell.setdefault(cell, ch)   # first FULL-order hit wins
+    return sorted(by_cell.items(), key=lambda kv: (kv[0][0], kv[0][1], str(kv[0][2])))
+
+
+def write_cell_specimen(corpus, lib):
+    from PIL import Image
+    reps = [ch for _, ch in cell_review_chars(corpus, lib)]
+    cols, scale, pad = 34, 5, 2
+    cw = 16 * scale + pad
+    rows_n = (len(reps) + cols - 1) // cols
+    img = Image.new("RGB", (cols * cw + pad, rows_n * cw + pad), (255, 255, 255))
+    px = img.load()
+    for i, ch in enumerate(reps):
+        gx, gy = pad + (i % cols) * cw, pad + (i // cols) * cw
+        out = compose(ch, lib)
+        for y in range(16):
+            for x in range(16):
+                color = (20, 20, 20) if out[y][x] == "#" else (255, 255, 255)
+                for dy in range(scale):
+                    for dx in range(scale):
+                        px[gx + x * scale + dx, gy + y * scale + dy] = color
+    os.makedirs(os.path.dirname(CELL_SPECIMEN), exist_ok=True)
+    img.save(CELL_SPECIMEN)
+    print(f"  cell review specimen: {len(reps)} cells -> {CELL_SPECIMEN}")
+
+
 # ---- CLI --------------------------------------------------------------------
 
 def load_corpus():
@@ -330,6 +390,8 @@ def main():
     ap.add_argument("--loo", type=int, nargs="?", const=300, metavar="N")
     ap.add_argument("--coverage", action="store_true")
     ap.add_argument("--missing", action="store_true")
+    ap.add_argument("--blobs", action="store_true")
+    ap.add_argument("--cellreview", action="store_true")
     ap.add_argument("--build", action="store_true")
     args = ap.parse_args()
 
@@ -403,6 +465,14 @@ def main():
         for cell in sorted(todo, key=lambda c: -blocked[c]):
             kind, jamo, beol = cell
             print(f"  {kind:4s} {jamo}  벌{beol}  영향 음절 {blocked[cell]}")
+
+    if args.blobs:
+        chars = blob_chars(corpus, lib)
+        print(f"\ncomposed with a 3x3 blob -- draw these by hand ({len(chars)}): "
+              + " ".join(chars))
+
+    if args.cellreview:
+        write_cell_specimen(corpus, lib)
 
     if args.build:
         full = {}

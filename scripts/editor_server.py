@@ -199,8 +199,11 @@ def text_grids(weight, s):
     """Per-char pixel grids for preview: custom glyphs (for this weight)
     override the original. With no custom entry yet, Light falls back to a
     weight-appropriate default instead of the raw 2px original:
-      - Hangul: the composed PC-98-base + our-consonants default (see
-        scripts/compose_light.py)
+      - Hangul: the jamo-component union (scripts/compose_components.py) --
+        the same model the 부품 셀 palette previews, and the only one that
+        covers all 11,172 (compose_light.compose only works where PC-98 has
+        that exact syllable, roughly the original 2,350). Falls back to
+        compose_light if the component library fails to load.
       - Latin/digits: the Regular custom glyph thinned to 1px (see
         tools/thin_vertical.py) -- this is what build_light actually uses,
         so the editor should preview the same thing."""
@@ -212,21 +215,39 @@ def text_grids(weight, s):
     cl = None
     cho_ref = jong_ref = None
     regular = tv = None
+    cc = ccomp_lib = None
+    has_hangul = any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in s)
     if weight == "light":
         cl = _composer()
+        pc98 = _pc98_grid_or_none() if (cl is not None and has_hangul) else None
         if cl is not None:
             cho_ref, jong_ref = cl.build_indices(custom)
         tv = _thinner()
         if tv is not None:
             regular = read_glyphs("regular")
+        ccmod = _ccomp() if has_hangul else None
+        if ccmod is not None and pc98 is not None:
+            try:
+                cc_corpus = ccmod.load_corpus()
+                cc_cho_ref = ccmod.build_zone_indices(cc_corpus, pc98)
+                seen = ccmod.observe(cc_corpus, pc98, cc_cho_ref)
+                cc = ccmod
+                ccomp_lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
+            except Exception:
+                cc = ccomp_lib = None
     out = []
     for ch in s:
         grid = custom.get(ch)
         if grid is None and weight == "light" and 0xAC00 <= ord(ch) <= 0xD7A3:
-            if cl is not None:
+            if cc is not None:
+                try:
+                    grid = cc.compose(ch, ccomp_lib)
+                except Exception:
+                    grid = None
+            if grid is None and cl is not None and pc98 is not None:
                 try:
                     if cl.can_compose(ch, cho_ref, jong_ref):
-                        grid = cl.compose(ch, _pc98_grid, custom, cho_ref, jong_ref)
+                        grid = cl.compose(ch, pc98, custom, cho_ref, jong_ref)
                 except Exception:
                     grid = None
         elif grid is None and tv is not None and regular is not None and ch in regular:
@@ -564,6 +585,20 @@ def component_cells():
             # one of those would look like work and do nothing (the 맋 trap).
             "examples": sorted((ch for ch in chars if ch in corpus),
                                key=lambda ch: pc98(ch) is None)[:12],
+        })
+
+    # Composed syllables with a 3x3 blob: every cell they need is filled, so
+    # they never show up as an empty cell above, but the union still isn't
+    # something a hand-drawn glyph would ever produce (see has_blob). The fix
+    # is to draw the syllable itself, which overrides the composition outright
+    # -- same "그릴 것" action as an empty cell, just anchored on a whole
+    # syllable instead of a jamo, so it rides the same list/filter/badge.
+    lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
+    for ch in cc.blob_chars(corpus, lib):
+        out.append({
+            "id": f"SYL:{ch}", "kind": "벽돌", "jamo": ch, "beol": "—",
+            "samples": 0, "affects": 1, "suggest": ch, "resolvable": True,
+            "stuck": False, "examples": [],
         })
     return out
 

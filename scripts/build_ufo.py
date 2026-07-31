@@ -28,6 +28,7 @@ import metadata as md
 import customglyphs as cg
 import thin_vertical as tv
 import compose_light as cl   # sibling script; scripts/ is sys.path[0] when run directly
+import compose_components as cc
 
 UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
@@ -174,9 +175,9 @@ def build_light(proportional=False):
     """Light weight: Latin/numbers and Hangul both follow the same
     confirmed-first rule -- a glyph hand-drawn and saved in
     tools/glyphs_light.json is used verbatim; anything unsaved is filled
-    mechanically (Latin/numbers: Regular thinned to 1px; Hangul: the composed
-    PC-98-base + our-consonants result for the 2,350 KS X 1001 syllables
-    gensei-pc98 needs -- see docs/ROADMAP.md Phase 2, not all 11,172 Hangul)."""
+    mechanically (Latin/numbers: Regular thinned to 1px; Hangul: the
+    jamo-component union over all 11,172 syllables -- see
+    scripts/compose_components.py / docs/ROADMAP.md)."""
     ufo = ufoLib2.Font()
     ufo.info.unitsPerEm = UPEM
     # 1px stems compile as the family's default Regular member (2px = Bold,
@@ -202,24 +203,26 @@ def build_light(proportional=False):
     light_latin = cg.build(light_latin_src)
 
     pc98 = cl.load_pc98()
-    cho_ref, jong_ref = cl.build_indices(refs)
-    ks = cl.ks_x1001_order()
+    corpus = cc.load_corpus()
+    lib = cc.build_library(corpus, pc98, cc.build_zone_indices(corpus, pc98))
     # hand-drawn glyphs are authoritative; compose only fills the unsaved gaps
     light_hangul_src, hand, gaps = {}, 0, 0
-    for ch in ks:
+    for ch in cc.FULL:
         if ch in refs:
             light_hangul_src[ch] = refs[ch]
             hand += 1
-        elif cl.can_compose(ch, cho_ref, jong_ref):
-            light_hangul_src[ch] = cl.compose(ch, pc98, refs, cho_ref, jong_ref)
-            gaps += 1
+        else:
+            out = cc.compose(ch, lib)
+            if out is not None:
+                light_hangul_src[ch] = out
+                gaps += 1
     light_hangul = cg.build(light_hangul_src)
 
-    missing = len(ks) - len(light_hangul_src)
+    missing = len(cc.FULL) - len(light_hangul_src)
     if missing:
-        skipped = "".join(ch for ch in ks if ch not in light_hangul_src)[:30]
-        print(f"  light: {missing}/{len(ks)} KS X 1001 Hangul skipped "
-              f"(missing 초성/종성 refs): {skipped}...")
+        skipped = "".join(ch for ch in cc.FULL if ch not in light_hangul_src)[:30]
+        print(f"  light: {missing}/{len(cc.FULL)} Hangul skipped "
+              f"(missing component cells): {skipped}...")
 
     added = 0
     for cp, (width_px, rows) in {**light_latin, **light_hangul}.items():
