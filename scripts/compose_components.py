@@ -202,6 +202,13 @@ def _ink(rows):
     return frozenset((y, x) for y in range(16) for x in range(16) if rows[y][x] == "#")
 
 
+# A 초중성(LV) sitting above a 받침 never reaches below this row. Anything
+# deeper is batchim ink the cut failed to take out, and unioning a real 종성(T)
+# on top of it is what produced solid bricks (풜, 뒐). Enforcing this took
+# filled-3x3 blobs from 159 to 0; hand-drawn glyphs have none in 2,669.
+LV_FLOOR = 9
+
+
 def zone_parts(ch, rows, pc98, cho_ref, corpus):
     """This syllable's own cell -> pixels, cut by PC-98's 받침 variance zone.
     None when the zone cut cannot be trusted and the caller must fall back to
@@ -215,25 +222,30 @@ def zone_parts(ch, rows, pc98, cho_ref, corpus):
     ships with a batchim baked in -- and composing adds the real 종성 on top of
     it. 풜 came out with two stacked batchims filling the lower half. Hand-drawn
     glyphs never contain a filled 3x3 block (0 of 2,669); composed ones did in
-    159 syllables, which this cut to 84."""
+    159 syllables, which this cut to 84.
+
+    Ink the zone leaves in the LV half below LV_FLOOR is MOVED to the 종성 half,
+    not grounds to throw the split away. LV_FLOOR states a structural fact --
+    a 초중성 above a 받침 does not reach that deep -- so such ink is 받침 ink the
+    diff-based zone failed to claim, and the same fact that condemns it in LV
+    says where it belongs. Discarding the whole split instead cost both halves:
+    every ㅞ 종성 cell (T:ㄴ/ㄹ/ㅂ/ㅆ/ㅇ) sat empty with 21 hand-drawn samples
+    available, because PC-98's ㅞ keeps (13,12) inked for EVERY 받침 -- an
+    invariant pixel is invisible to a diff, so the zone stops one pixel short
+    of our own 받침 bar and every last sample looked polluted. Moving it fixes
+    both halves at once: the LV loses batchim ink it never had, and the T gets
+    back the pixel that was missing from it."""
     if pc98(ch) is None:
         return None
     lv_c, *rest = cells_for(ch)
     cz, vz, jz = zones(ch, pc98, cho_ref, corpus)
     if rest and not jz:
         return None
-    parts = {lv_c: on(rows, cz) | on(rows, vz)}            # everything above 받침
-    if rest:
-        parts[rest[0]] = on(rows, jz)
-    return parts
-
-
-# A 초중성(LV) sitting above a 받침 never reaches below this row. Anything
-# deeper is batchim ink the cut failed to take out, and unioning a real 종성(T)
-# on top of it is what produced solid bricks (풜, 뒐). Rejecting those splits
-# outright took filled-3x3 blobs from 159 to 0; hand-drawn glyphs have none in
-# 2,669.
-LV_FLOOR = 9
+    lv = on(rows, cz) | on(rows, vz)                      # everything above 받침
+    if not rest:
+        return {lv_c: lv}
+    leak = frozenset(p for p in lv if p[0] > LV_FLOOR)
+    return {lv_c: lv - leak, rest[0]: on(rows, jz) | leak}
 
 
 def _lv_polluted(cell, px):
@@ -244,10 +256,11 @@ def _lv_polluted(cell, px):
 def observe(corpus, pc98, cho_ref):
     """cell -> Counter of candidate pixel sets.
 
-    Measured first: a syllable splits by PC-98's 받침 zone only when PC-98 can
-    actually show where the 받침 ends (zone_parts returns None otherwise), and
-    only when the resulting LV respects LV_FLOOR. A syllable with no 받침
-    needs no split, so it always counts.
+    Measured first: a syllable splits by PC-98's 받침 zone whenever PC-98 can
+    actually show where the 받침 ends (zone_parts returns None otherwise). A
+    syllable with no 받침 needs no split, so it always counts. zone_parts
+    enforces LV_FLOOR itself, by moving the offending ink to the 종성 half
+    rather than failing, so a split that comes back is always usable.
 
     Everything else -- representative syllables drawn to fill a cell, which are
     outside KS X 1001 by definition -- gets ONE subtraction pass: remove the
@@ -258,6 +271,9 @@ def observe(corpus, pc98, cho_ref):
         Chaining let one bad split seed the next and manufactured components
         nobody drew.
       * drop an LV remainder that breaks LV_FLOOR rather than storing it.
+        Here the ink cannot be moved instead: a remainder that deep means the
+        subtrahend was the wrong shape for this syllable, so its excess is not
+        known to be 받침 ink the way a zone leak is.
 
     Without the pass a drawn representative could never fill its own cell (맔
     is outside PC-98, so 종성 ㄽ stayed empty however often it was drawn), which
@@ -267,7 +283,7 @@ def observe(corpus, pc98, cho_ref):
     leftover = []
     for ch, rows in corpus.items():
         parts = zone_parts(ch, rows, pc98, cho_ref, corpus)
-        if parts is None or any(_lv_polluted(c, px) for c, px in parts.items()):
+        if parts is None:
             cells = cells_for(ch)
             if len(cells) == 1:               # no 받침 -> nothing to split off
                 measured[cells[0]][_ink(rows)] += 1
