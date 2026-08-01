@@ -22,11 +22,11 @@ jobs:
       # and the extraction result is committed (tools/component_library.json).
       # The build is corpus + that file. See compose_components.py --freeze.
       - name: Checkout font
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: font
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -59,7 +59,7 @@ jobs:
           cp font/build/DokkaebiDNRGothic-Regular.woff2 _site/
           cp font/build/DokkaebiDNRGothic-Bold.woff2 _site/
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -71,4 +71,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
