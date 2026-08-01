@@ -428,7 +428,7 @@ def write_cell_specimen(corpus, lib):
 # ---- CLI --------------------------------------------------------------------
 
 def load_corpus():
-    """Confirmed Hangul syllables only -- the file also holds Latin/kana."""
+    """Confirmed Hangul syllables only -- the file also holds Latin/symbols."""
     with open(CORPUS, encoding="utf-8") as f:
         data = json.load(f)
     return {ch: rows for ch, rows in data.items()

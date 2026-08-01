@@ -22,14 +22,6 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              original, before finally falling back to that.
   GET  /api/ks2350        -> the 2,350 KS X 1001 완성형 syllables (char list),
                              for the editor's full-coverage Light palette.
-  GET  /api/kana          -> hiragana + katakana + halfwidth katakana (char
-                             list), for the editor's kana palette (Phase 3).
-  GET  /api/kanaref?s=..  -> reference grids for kana, from the genuine
-                             (unlocalized) Japanese PC-98 BIOS font
-                             (original/pc98_jp.bmp, a different ROM dump than
-                             the Korean-localized pc98_font.bmp everything
-                             else here reads) -- see docs/ROADMAP.md. Overlay
-                             only; never embedded in built output.
   GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from
                              DKBDinaru (~/Library/Fonts/DKBDinaru.ttf, local
                              machine only) -- native 16x16 pixel design.
@@ -273,11 +265,6 @@ def text_grids(weight, s):
                 grid = tv.thin_vertical(regular[ch])
             except Exception:
                 grid = None
-        if grid is None and _is_kana(ch):
-            # PC-98's 둥근모꼴 replaces the original bitmap's kana entirely
-            # (both weights) -- font.bmp's kana was never touched by the
-            # Korean localization, unlike its Hangul/kanji regions.
-            grid = _pc98_kana_grid(ch)
         if grid is None:
             grid = _original_grid(ch, strike, cmap)
             # The original strike is the 2px source. Handing it back unchanged
@@ -313,75 +300,6 @@ def _pc98():
         _PC98 = (img.load(), cells)
     return _PC98
 
-
-
-
-_PC98_KANA = None  # lazy (PIL pixel access, {kana: [col, row]})
-PC98_KANA_MAP = os.path.join(ROOT, "tools", "pc98_kana_map.json")
-
-
-def _pc98_kana():
-    """PC-98 BIOS 둥근모꼴 hiragana/katakana: tools/pc98_kana_map.json (see
-    scripts/pc98_kana_map.py) plus the same font.bmp Hangul indexes into.
-    No halfwidth katakana -- not present anywhere in this ROM."""
-    global _PC98_KANA
-    if _PC98_KANA is None:
-        px, _ = _pc98()  # reuse the same bitmap; raises if unavailable
-        with open(PC98_KANA_MAP, encoding="utf-8") as f:
-            cells = json.load(f)["cells"]
-        _PC98_KANA = (px, cells)
-    return _PC98_KANA
-
-
-def _pc98_kana_grid(ch):
-    try:
-        px, cells = _pc98_kana()
-    except Exception:
-        return None
-    cell = cells.get(ch)
-    if not cell:
-        return None
-    col, row = cell
-    x0, y0 = col * 16, row * 16
-    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
-            for y in range(16)]
-
-
-# Genuine (unlocalized) Japanese PC-98 BIOS font -- original/pc98_jp.bmp, a
-# different ROM dump than pc98_font.bmp (the Korean-localized one everything
-# else here reads). Reference only, for the editor's kana overlay: measured
-# against our own kana, this one's ink runs noticeably wider (right edge as
-# far as col 15; ours never passes col 13) -- see docs/ROADMAP.md. Same
-# col/row layout as the Korean ROM's kana block, confirmed directly (같은
-# tools/pc98_kana_map.json coordinates land on あ/ア in both), so it reuses
-# that map rather than needing its own.
-PC98_JP_BMP = os.path.join(ROOT, "original", "pc98_jp.bmp")
-_PC98_JP = None
-
-
-def _pc98_jp():
-    global _PC98_JP
-    if _PC98_JP is None:
-        from PIL import Image
-        img = Image.open(PC98_JP_BMP).convert("L")
-        with open(PC98_KANA_MAP, encoding="utf-8") as f:
-            cells = json.load(f)["cells"]
-        _PC98_JP = (img.load(), cells)
-    return _PC98_JP
-
-
-def _pc98_jp_kana_grid(ch):
-    try:
-        px, cells = _pc98_jp()
-    except Exception:
-        return None
-    cell = cells.get(ch)
-    if not cell:
-        return None
-    col, row = cell
-    x0, y0 = col * 16, row * 16
-    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
-            for y in range(16)]
 
 
 
@@ -736,12 +654,6 @@ def _pc98_grid_or_none():
     return cl.load_pc98()
 
 
-# Kana helper -- also used by text_grids to route kana to the PC-98 둥근모꼴
-# reference instead of the original bitmap (see docs/ROADMAP.md).
-def _is_kana(ch):
-    return (0x3041 <= ord(ch) <= 0x30FF) or (0xFF61 <= ord(ch) <= 0xFF9F)
-
-
 # Symbol/punctuation reference: DKBDinaru (~/Library/Fonts/DKBDinaru.ttf), a
 # 16-unitsPerEm pixel-native font -- and per its own name table, literally
 # Juwan Park's "Dokkaebi Dinaru" revival, independently made from the same source bitmap this whole
@@ -781,7 +693,7 @@ def _dinaru():
 
 
 def _ref_width(cp):
-    """8 for halfwidth ASCII/kana-jamo, 16 otherwise -- matches the editor's
+    """8 for halfwidth ASCII/punctuation/jamo, 16 otherwise -- matches the editor's
     own widthFor() so the overlay lines up with the canvas it's drawn under,
     independent of whatever advance width the reference font itself uses."""
     if 0x20 <= cp <= 0x7E or 0xFF61 <= cp <= 0xFFDC:
@@ -836,23 +748,6 @@ def sym_ref_grids(s):
     return [{"ch": ch, "rows": _symbol_ref_grid(ch)} for ch in s]
 
 
-def kana_chars():
-    """Hiragana + katakana + halfwidth katakana (Unicode-assigned codepoints
-    only), for the editor's kana palette (Phase 3)."""
-    import unicodedata
-
-    def assigned(lo, hi):
-        out = []
-        for cp in range(lo, hi + 1):
-            try:
-                unicodedata.name(chr(cp))
-            except ValueError:
-                continue
-            out.append(chr(cp))
-        return out
-    return assigned(0x3041, 0x309F) + assigned(0x30A1, 0x30FF) + assigned(0xFF61, 0xFF9F)
-
-
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         payload = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -898,14 +793,6 @@ class Handler(BaseHTTPRequestHandler):
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": sym_ref_grids(s)},
                                               ensure_ascii=False))
-        if parsed.path == "/api/kana":
-            return self._send(200, json.dumps({"chars": kana_chars()},
-                                              ensure_ascii=False))
-        if parsed.path == "/api/kanaref":
-            s = qs.get("s", [""])[0]
-            return self._send(200, json.dumps(
-                {"chars": [{"ch": ch, "rows": _pc98_jp_kana_grid(ch)} for ch in s]},
-                ensure_ascii=False))
         if parsed.path in ("/components", "/components.html", "/components/"):
             # The component-cell editor is now the main editor's 부품 셀 palette
             # tab -- its drawing half was a duplicate of that editor's. Kept as
@@ -997,21 +884,18 @@ class Handler(BaseHTTPRequestHandler):
 # The two internal weight keys map to the two members of one RIBBI family:
 # "regular" = 2px stems -> compiled Bold; "light" = 1px stems -> compiled
 # Regular (the family default). See tools/metadata.py / build_ufo.py.
-# --exclude-kana: kana spacing is still being reworked (see docs/ROADMAP.md),
-# so leave it out of the compiled font for now -- doesn't touch the glyph
-# data itself, still fully editable here. Drop the flag once kana is ready.
 BUILD_TARGETS = {
     "regular": {
         "ufo": "build/DokkaebiDNRGothic-Bold.ufo",
         "ttf": "build/DokkaebiDNRGothic-Bold.ttf",
         "otf": "build/DokkaebiDNRGothic-Bold.otf",
-        "build_args": ["--all", "--exclude-kana"],
+        "build_args": ["--all"],
     },
     "light": {
         "ufo": "build/DokkaebiDNRGothic-Regular.ufo",
         "ttf": "build/DokkaebiDNRGothic-Regular.ttf",
         "otf": "build/DokkaebiDNRGothic-Regular.otf",
-        "build_args": ["--weight", "light", "--exclude-kana"],
+        "build_args": ["--weight", "light"],
     },
 }
 
@@ -1066,13 +950,13 @@ def run_build_bmp():
 def _ensure_venv():
     """Re-exec under this project's .venv if we're not already running there.
 
-    fontTools/PIL (via tools/pixelfont.py, the PC-98/kana/halfwidth lookups,
-    etc.) only live in .venv, and every one of those call sites imports them
-    lazily and fails closed (try/except -> blank grid) rather than raising --
-    so running under plain system `python3` doesn't error, it just silently
-    renders Regular Hangul (and kana, and the PC-98/kana-ref overlays) as
-    nothing but blank cells. Re-exec here removes the whole "did you
-    activate the venv" failure mode instead of relying on people remembering."""
+    fontTools/PIL (via tools/pixelfont.py, the PC-98/halfwidth lookups, etc.)
+    only live in .venv, and every one of those call sites imports them lazily
+    and fails closed (try/except -> blank grid) rather than raising -- so
+    running under plain system `python3` doesn't error, it just silently
+    renders Regular Hangul (and the reference overlays) as nothing but blank
+    cells. Re-exec here removes the whole "did you activate the venv" failure
+    mode instead of relying on people remembering."""
     venv_dir = os.path.join(ROOT, ".venv")
     venv_py = os.path.join(venv_dir, "bin", "python3")
     # Compare sys.prefix, not sys.executable/realpath: .venv/bin/python3 is

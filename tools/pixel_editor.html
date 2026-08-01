@@ -64,7 +64,6 @@
   .ghost { position: absolute; inset: 2px; pointer-events: none; opacity: 0.35; }
   .ghost-sym { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
   .ghost-ref2 { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
-  .ghost-kana { position: absolute; inset: 2px; pointer-events: none; opacity: 0.45; }
 
   .guides { position: absolute; inset: 2px; pointer-events: none; }
   .guides .gline { position: absolute; left: 0; right: 0; height: 0;
@@ -191,7 +190,6 @@
           <canvas class="ghost" id="ghost"></canvas>
           <canvas class="ghost-sym" id="ghostSym"></canvas>
           <canvas class="ghost-ref2" id="ghostRef2"></canvas>
-          <canvas class="ghost-kana" id="ghostKana"></canvas>
           <div class="guides" id="guides"></div>
         </div>
       </div>
@@ -239,7 +237,6 @@
     <div class="ptab-bar" role="tablist" aria-label="팔레트 분류">
       <button class="ptab" data-cat="latin" role="tab" aria-selected="true">영숫자</button>
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
-      <button class="ptab" data-cat="kana" role="tab" aria-selected="false">가나</button>
       <button class="ptab" data-cat="symbols" role="tab" aria-selected="false">기호</button>
       <button class="ptab" data-cat="cells" role="tab" aria-selected="false">부품 셀</button>
     </div>
@@ -264,14 +261,6 @@
         <div class="palette-group">
           <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
           <div class="palette" id="paletteAll2350"></div>
-        </div>
-      </div>
-    </div>
-    <div class="palette-cat" data-cat="kana" hidden>
-      <div class="palette-scroll">
-        <div class="palette-group">
-          <p class="sublabel">가나 (히라가나·가타카나·반각가타카나, 251자)</p>
-          <div class="palette" id="paletteKana"></div>
         </div>
       </div>
     </div>
@@ -369,16 +358,6 @@
       const j = await res.json();
       KS2350_CHARS = j.chars || [];
     } catch (e) { KS2350_CHARS = []; }
-  }
-  // 히라가나+가타카나+반각가타카나 251자 -- 서버의 /api/kana에서 채워짐 (Phase 3).
-  let KANA_CHARS = [];
-  async function fetchKana() {
-    if (KANA_CHARS.length) return;
-    try {
-      const res = await fetch("api/kana", { cache: "no-store" });
-      const j = await res.json();
-      KANA_CHARS = j.chars || [];
-    } catch (e) { KANA_CHARS = []; }
   }
   let guidesOn = true;
   let ghostOn = true;
@@ -487,30 +466,21 @@
   }
 
   // ---- ghost overlays ----
-  // Four overlays, all gated by the 참조 오버레이 toggle:
+  // Three overlays, all gated by the 참조 오버레이 toggle:
   //  - #ghost (--ink): the other weight of the SAME character, whichever one
-  //    is the reference for what you're drawing. On the Bold tab for kana,
-  //    the confirmed Light glyph, to thicken 1px -> 2px against; on the
-  //    Regular tab for Hangul, the original Bold skeleton to thin down from.
+  //    is the reference for what you're drawing. On the Regular tab for
+  //    Hangul, the original Bold skeleton to thin down from.
   //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
   //    CURRENT weight, so a similar already-drawn glyph can be traced against.
   //  - blue (#ghostSym, --guide): DKBDinaru, for symbols/punctuation only
   //    (see /api/symref). Shape reference; still redrawn by hand.
-  //  - green (#ghostKana, --guide3): kana only, from the genuine Japanese
-  //    PC-98 BIOS font (see /api/kanaref) -- measured wider ink than ours
-  //    (right edge reaches col 15; ours never passes col 13), the likely
-  //    source of the uneven-spacing feedback. Shape/spacing reference only.
-  function isKana(ch) {
-    const c = ch.codePointAt(0);
-    return (c >= 0x3041 && c <= 0x30FF) || (c >= 0xFF61 && c <= 0xFF9F);
-  }
   function isHangul(ch) {
     const c = ch.codePointAt(0);
     return (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3130 && c <= 0x318F);
   }
-  // Everything that isn't Hangul/kana gets the DKBDinaru reference: Latin,
+  // Everything that isn't Hangul gets the DKBDinaru reference: Latin,
   // digits, punctuation, currency, math, arrows, box drawing, blocks, shapes.
-  function isSymRef(ch) { return !isKana(ch) && !isHangul(ch); }
+  function isSymRef(ch) { return !isHangul(ch); }
   // One fetch for all three reference sources -- they differ only in URL.
   // Caches null on failure too, so a miss isn't retried on every repaint;
   // `ch in cache` (not truthiness) is what tells "already asked" from "not
@@ -531,10 +501,8 @@
     return ch => (ch in cache ? cache[ch] : (fetch1(ch), null));
   }
   const refText = w => ch => `api/text?weight=${w}&s=` + encodeURIComponent(ch);
-  const lightRef = refFetcher(refText("light"));
   const boldRef = refFetcher(refText("regular"));
   const symRef = refFetcher(ch => "api/symref?s=" + encodeURIComponent(ch));
-  const kanaJpRef = refFetcher(ch => "api/kanaref?s=" + encodeURIComponent(ch));
   function paintGhost(cv, rows, colorVar) {
     const px = 22;
     cv.width = W * px; cv.height = H * px;
@@ -551,9 +519,7 @@
   }
   function drawGhost() {
     let rows = null;
-    if (ghostOn && WEIGHT === "regular" && isKana(curChar)) {
-      rows = lightRef(curChar);
-    } else if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
+    if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
       // Bold on purpose, unthinned: it shows the original skeleton as drawn,
       // and deciding which stroke survives the 1px reduction is a visual call
       // to make against it, not something to pre-apply.
@@ -562,11 +528,6 @@
     paintGhost(document.getElementById("ghost"), rows, "--ink");
     drawSymGhost();
     drawRefGhost();
-    drawKanaGhost();
-  }
-  function drawKanaGhost() {
-    const rows = ghostOn && isKana(curChar) ? kanaJpRef(curChar) : null;
-    paintGhost(document.getElementById("ghostKana"), rows, "--guide3");
   }
   function drawSymGhost() {
     const rows = ghostOn && isSymRef(curChar) ? symRef(curChar) : null;
@@ -656,7 +617,6 @@
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
     buildPaletteGroup("paletteAll2350", KS2350_CHARS);
-    buildPaletteGroup("paletteKana", KANA_CHARS);
     ensureSymbolGroupsDom();
     for (const [key, , chars] of SYMBOL_GROUPS)
       buildPaletteGroup(`paletteSym-${key}`, Array.from(chars));
@@ -666,7 +626,7 @@
     // just follows the active weight (server fills unsaved glyphs per weight).
     paletteData = {};
     const symbolChars = SYMBOL_GROUPS.map(([, , chars]) => chars).join("");
-    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + KANA_CHARS.join("") + symbolChars;
+    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + symbolChars;
     try {
       const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(chars),
                               { cache: "no-store" });
@@ -685,12 +645,12 @@
   // Advance width is a FIXED property of the character, never of editor state.
   // Derived from the existing data (all 2,900+ saved glyphs agree): 8px for
   // ASCII and the halfwidth forms block, 16px for everything else -- Hangul,
-  // kana, CJK punctuation, fullwidth forms, and every symbol block including
+  // CJK punctuation, fullwidth forms, and every symbol block including
   // Latin-1 (±, ×, ÷ are fullwidth here, following KS X 1001).
   function widthFor(ch) {
     const c = ch.codePointAt(0);
     if (c >= 0x20 && c <= 0x7E) return 8;      // ASCII printable
-    if (c >= 0xFF61 && c <= 0xFFDC) return 8;  // halfwidth kana + jamo
+    if (c >= 0xFF61 && c <= 0xFFDC) return 8;  // halfwidth punctuation + jamo
     return 16;
   }
   // A saved glyph's own width wins: it is the glyph that actually exists, and
@@ -709,7 +669,7 @@
     buildGrid();
     markPalette();
     if (rows || !SERVER) return;
-    // paletteSource only knows the precomputed sets (완성형 2,350, Latin, kana,
+    // paletteSource only knows the precomputed sets (완성형 2,350, Latin,
     // symbols) -- anything else (조합형-only Hangul outside those 2,350, e.g.
     // representative syllables for the component editor) falls through as
     // blank even when the server actually has real data for it. Fetch this
@@ -837,7 +797,6 @@
       DATA = await fetchWeightData(WEIGHT);
       setStatus(true, "서버 연결됨 · 저장 가능");
       await fetchKs2350();
-      await fetchKana();
       await loadPaletteData();
       buildPalette();
       loadChar(paletteSource(curChar) ? curChar : defaultCharFor(WEIGHT));

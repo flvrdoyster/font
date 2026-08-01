@@ -8,8 +8,8 @@ not a mismatch, so "intended" is not simply "the original bitmap."
 Weight is inferred from the filename ("Regular" = Light/1px, else Bold/2px):
   Bold (2px):    original bitmap, tools/glyphs_bold.json overrides win
   Regular (1px): tools/glyphs_light.json hand-drawn wins, compose_components
-                 fills the rest (see docs/ROADMAP.md). Hangul only -- Latin/
-                 kana/symbols go through thin_vertical, a separate path this
+                 fills the rest (see docs/ROADMAP.md). Hangul only -- Latin
+                 and symbols go through thin_vertical, a separate path this
                  script doesn't reproduce.
 
 Assumes --proportional (both README build commands use it): tools/spacing.py
@@ -117,14 +117,6 @@ def _shift_cols(width, row, dx):
 
 def main():
     expected = expected_light() if IS_LIGHT else expected_bold()
-
-    # Kana may have been left out on purpose (build_ufo.py --exclude-kana --
-    # see docs/ROADMAP.md, kana spacing is still being reworked). Detect it
-    # from the actual font rather than assuming: check one kana codepoint's
-    # presence, since a flag passed at build time isn't visible here.
-    probe = TTFont(BUILT).getBestCmap()
-    if not any(bu._is_kana(cp) for cp in probe):
-        expected = {cp: v for cp, v in expected.items() if not bu._is_kana(cp)}
 
     if ARGS.proportional:
         shifted = {}

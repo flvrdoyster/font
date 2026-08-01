@@ -35,29 +35,6 @@ ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
 DESCENDER = 0
 CAP = 12 * pf.PX     # rough, informational
 
-KANJI_BMP = os.path.join("original", "pc98_jp.bmp")
-KANJI_MAP = os.path.join("tools", "pc98_kanji_map.json")
-
-
-def load_kanji():
-    """{codepoint: (16, [16 row bitmasks])} for the 6,356 JIS X 0208 kanji,
-    read verbatim from the genuine Japanese PC-98 BIOS font (original/
-    pc98_jp.bmp -- see scripts/pc98_kanji_map.py). Used as-is, identically
-    for both weights: unlike everything else here, kanji isn't redrawn or
-    weight-adjusted, just included (see docs/ROADMAP.md)."""
-    from PIL import Image
-    px = Image.open(KANJI_BMP).convert("L").load()
-    with open(KANJI_MAP, encoding="utf-8") as f:
-        cells = json.load(f)["cells"]
-    out = {}
-    for ch, (col, row) in cells.items():
-        x0, y0 = col * 16, row * 16
-        rows = [sum((1 << (15 - x)) for x in range(16) if px[x0 + x, y0 + y] < 128)
-                for y in range(16)]
-        if any(rows):
-            out[ord(ch)] = (16, rows)
-    return out
-
 # The original bitmap's cmap carries a few codepoints that shouldn't ship:
 # C0/C1 control characters with leftover ink from the legacy code page (a
 # rendering bug -- fontbakery whitespace_ink/control_chars), and soft hyphen
@@ -69,10 +46,16 @@ _EXPLICIT_EXCLUDE = {
     0x212B,   # ANGSTROM SIGN -- case-equivalent to Å/å, neither of which exists either
 }
 
-
-def _is_kana(cp):
-    return cp is not None and (0x3041 <= cp <= 0x309F or 0x30A1 <= cp <= 0x30FF
-                                or 0xFF61 <= cp <= 0xFF9F)
+# Japanese is out of scope for this font (docs/ROADMAP.md). Kana has to be
+# excluded actively rather than merely left undrawn: the original HANKBC
+# strike ships 169 of them, so without this they would ride along verbatim
+# into the Bold member. Kanji needs no rule -- it only ever entered through an
+# explicit pass over a separate bitmap, and that pass is gone.
+#
+# The halfwidth range starts at FF65, not FF61: FF61-FF64 (｡｢｣､) are halfwidth
+# CJK PUNCTUATION, not kana -- everything from FF65 up is KATAKANA-named. Their
+# fullwidth twins (。「」、, U+3001-300D) ship, so the halfwidth forms do too.
+_KANA_RANGES = [(0x3041, 0x309F), (0x30A1, 0x30FF), (0xFF65, 0xFF9F)]
 
 
 def _excluded_codepoint(cp):
@@ -80,7 +63,7 @@ def _excluded_codepoint(cp):
         return False
     if cp in _EXPLICIT_EXCLUDE:
         return True
-    return any(lo <= cp <= hi for lo, hi in _CONTROL_RANGES)
+    return any(lo <= cp <= hi for lo, hi in _CONTROL_RANGES + _KANA_RANGES)
 
 
 def _expected_blank(cp):
@@ -93,7 +76,7 @@ def _expected_blank(cp):
     return unicodedata.category(chr(cp)) in ("Zs", "Zl", "Zp", "Cf")
 
 
-def build(chars=None, all_glyphs=False, proportional=False, exclude_kana=False):
+def build(chars=None, all_glyphs=False, proportional=False):
     font = TTFont("original/HANKBC.ttf")
     strike = pf.read_strike(font)
     cmap = font.getBestCmap()
@@ -133,17 +116,16 @@ def build(chars=None, all_glyphs=False, proportional=False, exclude_kana=False):
             continue
         width_px, rows = strike[gname]
         cp = rev.get(gname)
-        if exclude_kana and _is_kana(cp):
+        # Checked ahead of the hand-drawn override: these codepoints are out of
+        # scope or unshippable outright, so a drawing does not earn them a place.
+        if _excluded_codepoint(cp):
+            skipped_control += 1
             continue
         if cp in cg.GLYPHS:                    # hand-drawn override
             width_px, rows = cg.GLYPHS[cp]
-        else:
-            if _excluded_codepoint(cp):
-                skipped_control += 1
-                continue
-            if not any(rows) and not _expected_blank(cp):
-                skipped_blank += 1
-                continue
+        elif not any(rows) and not _expected_blank(cp):
+            skipped_blank += 1
+            continue
         if proportional:
             adv_px, shift_px = sp.proportional(width_px, rows, cp)
         else:
@@ -164,51 +146,31 @@ def build(chars=None, all_glyphs=False, proportional=False, exclude_kana=False):
             print(f"  ...{added} glyphs", flush=True)
 
     # cg.GLYPHS (glyphs_bold.json) can hold codepoints with no counterpart in
-    # the original HANKBC strike at all -- e.g. most of the kana palette
-    # beyond the 169 characters that bitmap happens to include. The loop
-    # above only visits strike-derived glyph names, so those would otherwise
-    # be silently dropped even though they're hand-drawn and ready. Add them
-    # directly, scoped to the same requested character set as the main pass.
+    # the original HANKBC strike at all. The loop above only visits
+    # strike-derived glyph names, so those would otherwise be silently dropped
+    # even though they're hand-drawn and ready. Add them directly, scoped to
+    # the same requested character set as the main pass.
     wanted_cps = None if all_glyphs else {ord(ch) for ch in (chars or ())}
     extra = 0
     for cp, (width_px, rows) in cg.GLYPHS.items():
-        if cp in seen_cps:
+        if cp in seen_cps or _excluded_codepoint(cp):
             continue
         if wanted_cps is not None and cp not in wanted_cps:
-            continue
-        if exclude_kana and _is_kana(cp):
             continue
         _add_verbatim(ufo, cp, width_px, rows, proportional)
         seen_cps.add(cp)
         added += 1
         extra += 1
 
-    # Kanji: used as-is, verbatim from the genuine PC-98 font, identically for
-    # both weights -- no hand-drawn override to check against (none exist),
-    # but still deferring to one if it ever shows up costs nothing.
-    kanji = 0
-    for cp, (width_px, rows) in load_kanji().items():
-        if cp in seen_cps or cp in cg.GLYPHS:
-            continue
-        if wanted_cps is not None and cp not in wanted_cps:
-            continue
-        _add_verbatim(ufo, cp, width_px, rows, proportional)
-        seen_cps.add(cp)
-        added += 1
-        kanji += 1
-    if kanji:
-        print(f"  +{kanji} kanji (verbatim, original/pc98_jp.bmp)")
-
     if skipped_control or skipped_blank:
-        print(f"  skipped {skipped_control} control-char/soft-hyphen codepoints, "
+        print(f"  skipped {skipped_control} control-char/soft-hyphen/kana codepoints, "
               f"{skipped_blank} blank-in-original codepoints (e.g. registered, Euro)")
     if extra:
-        print(f"  +{extra} hand-drawn glyphs with no original-strike counterpart "
-              f"(e.g. kana beyond the original 169)")
+        print(f"  +{extra} hand-drawn glyphs with no original-strike counterpart")
     return ufo
 
 
-def build_light(proportional=False, exclude_kana=False):
+def build_light(proportional=False):
     """Light weight: Latin/numbers and Hangul both follow the same
     confirmed-first rule -- a glyph hand-drawn and saved in
     tools/glyphs_light.json is used verbatim; anything unsaved is filled
@@ -231,7 +193,7 @@ def build_light(proportional=False, exclude_kana=False):
     latin_src = cg.load_src()
     light_latin_src, latin_hand, latin_thinned = {}, 0, 0
     for ch, grid in latin_src.items():
-        if exclude_kana and len(ch) == 1 and _is_kana(ord(ch)):
+        if len(ch) == 1 and _excluded_codepoint(ord(ch)):
             continue
         if ch in refs:
             light_latin_src[ch] = refs[ch]
@@ -266,17 +228,8 @@ def build_light(proportional=False, exclude_kana=False):
         print(f"  light: {missing}/{len(cc.FULL)} Hangul skipped "
               f"(missing component cells): {skipped}...")
 
-    # Kanji: used as-is, verbatim, identically to the Bold member -- no
-    # thin_vertical, no hand redesign (see docs/ROADMAP.md). A hand-drawn
-    # entry would still win if one ever shows up in glyphs_light.json; none
-    # do today.
-    light_kanji = {}
-    for cp, (width_px, rows) in load_kanji().items():
-        ch = chr(cp)
-        light_kanji[cp] = cg._to_rows(refs[ch]) if ch in refs else (width_px, rows)
-
     added = 0
-    for cp, (width_px, rows) in {**light_latin, **light_hangul, **light_kanji}.items():
+    for cp, (width_px, rows) in {**light_latin, **light_hangul}.items():
         adv_px, shift_px = (sp.proportional(width_px, rows, cp) if proportional
                             else ((width_px if width_px else 8), 0))
         glyph = Glyph(name=f"uni{cp:04X}")
@@ -292,8 +245,7 @@ def build_light(proportional=False, exclude_kana=False):
 
     print(f"  light: {added} glyphs added "
           f"({latin_hand} Latin/numbers hand-drawn + {latin_thinned} thinned, "
-          f"{hand} Hangul hand-drawn + {gaps} composed, "
-          f"{len(light_kanji)} kanji verbatim)")
+          f"{hand} Hangul hand-drawn + {gaps} composed)")
     return ufo
 
 
@@ -309,9 +261,8 @@ def _draw(glyph, contours):
 
 
 def _add_verbatim(ufo, cp, width_px, rows, proportional):
-    """Add a uniXXXX-named glyph straight from pixel rows -- shared by
-    build()'s beyond-original-strike pass and its kanji pass, which are
-    otherwise identical."""
+    """Add a uniXXXX-named glyph straight from pixel rows -- used by build()'s
+    beyond-original-strike pass."""
     if proportional:
         adv_px, shift_px = sp.proportional(width_px, rows, cp)
     else:
@@ -360,21 +311,17 @@ def main():
                     help="derive proportional advances from pixel ink bounds")
     ap.add_argument("--weight", choices=["regular", "light"], default="regular")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--exclude-kana", action="store_true",
-                    help="leave kana out of the build (glyph data stays in "
-                         "glyphs_light.json/glyphs_bold.json either way) -- "
-                         "for while kana spacing is still being reworked")
     args = ap.parse_args()
 
     if args.weight == "light":
-        ufo = build_light(proportional=args.proportional, exclude_kana=args.exclude_kana)
+        ufo = build_light(proportional=args.proportional)
         out = args.out or "build/DokkaebiDNRGothic-Regular.ufo"
     elif args.all:
-        ufo = build(all_glyphs=True, proportional=args.proportional, exclude_kana=args.exclude_kana)
+        ufo = build(all_glyphs=True, proportional=args.proportional)
         out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
     else:
         text = args.subset or "안녕하세요세계 다람쥐헌쳇바퀴 Hello, World! 0123456789 @#&"
-        ufo = build(chars=set(text), proportional=args.proportional, exclude_kana=args.exclude_kana)
+        ufo = build(chars=set(text), proportional=args.proportional)
         out = args.out or "build/DokkaebiDNRGothic-Bold.ufo"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     ufo.save(out, overwrite=True)
