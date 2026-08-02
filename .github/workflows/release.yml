@@ -1,0 +1,82 @@
+name: Release fonts
+
+# Tag-driven so a release is always a deliberate act, never a side effect of a
+# push to main. The webfont workflow keeps deploying every push to Pages -- that
+# is the live demo; THIS is what people pin to and self-host (see README).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build a release for (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write        # needed to create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout font
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The tag is the release's name, so it must agree with what the compiled
+      # fonts actually report (tools/metadata.py VERSION -> nameID5). Shipping
+      # "v1.1.0" assets whose name table says 1.0.0 is exactly the kind of drift
+      # that makes a pinned version meaningless -- fail before publishing.
+      - name: Check tag matches metadata VERSION
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version=$(python -c "import sys; sys.path.insert(0,'tools'); import metadata; print(metadata.VERSION)")
+          echo "tag=$tag  metadata.VERSION=$version"
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::tag $tag does not match tools/metadata.py VERSION $version (expected v$version)"
+            exit 1
+          fi
+
+      - name: Build Regular (1px)
+        run: |
+          python scripts/build_ufo.py --weight light --proportional --out build/DokkaebiDNRGothic-Regular.ufo
+          fontmake -u build/DokkaebiDNRGothic-Regular.ufo -o ttf otf --output-dir build
+          python scripts/finalize.py build/DokkaebiDNRGothic-Regular.ttf build/DokkaebiDNRGothic-Regular.otf
+
+      - name: Build Bold (2px)
+        run: |
+          python scripts/build_ufo.py --all --proportional --out build/DokkaebiDNRGothic-Bold.ufo
+          fontmake -u build/DokkaebiDNRGothic-Bold.ufo -o ttf otf --output-dir build
+          python scripts/finalize.py build/DokkaebiDNRGothic-Bold.ttf build/DokkaebiDNRGothic-Bold.otf
+
+      - name: Build webfonts (WOFF2)
+        run: python scripts/build_webfont.py build/DokkaebiDNRGothic-Regular.otf build/DokkaebiDNRGothic-Bold.otf
+
+      - name: Verify built fonts
+        run: |
+          python scripts/verify_ttf.py build/DokkaebiDNRGothic-Regular.ttf
+          python scripts/verify_ttf.py build/DokkaebiDNRGothic-Bold.ttf
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            --repo "${{ github.repository }}" \
+            build/DokkaebiDNRGothic-Regular.woff2 \
+            build/DokkaebiDNRGothic-Bold.woff2 \
+            build/DokkaebiDNRGothic-Regular.otf \
+            build/DokkaebiDNRGothic-Bold.otf \
+            build/DokkaebiDNRGothic-Regular.ttf \
+            build/DokkaebiDNRGothic-Bold.ttf

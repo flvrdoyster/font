@@ -9,7 +9,7 @@ FAMILY = "Dokkaebi DNR Gothic"
 FAMILY_KO = "도깨비DNR 고딕"
 RFN = "Dokkaebi DNR"                     # OFL Reserved Font Name
 RIBBI = {"Regular", "Bold", "Italic", "Bold Italic"}
-VERSION = "0.2.0"
+VERSION = "1.0.0"
 VENDOR_ID = "FDoy"                       # OS/2 achVendID (<=4 chars)
 DESIGNER = "flvrdoyster"
 

@@ -39,6 +39,11 @@ OTF(CFF)가 TTF보다 압축이 더 잘 된다 -- 픽셀 폰트라 글리프당 
 .venv/bin/python scripts/build_webfont.py build/DokkaebiDNRGothic-Regular.otf build/DokkaebiDNRGothic-Bold.otf
 ```
 
+### 쓰는 법 — 직접 호스팅
+
+[Releases](https://github.com/flvrdoyster/font/releases)에서 원하는 버전의
+`.woff2` 두 개를 받아 CSS 옆에 두고 상대 경로로 가리킨다.
+
 ```css
 @font-face {
   font-family: "Dokkaebi DNR Gothic";
@@ -51,3 +56,25 @@ OTF(CFF)가 TTF보다 압축이 더 잘 된다 -- 픽셀 폰트라 글리프당 
   font-weight: 700;
 }
 ```
+
+**업데이트 확인**: 이 레포에서 Watch → Custom → Releases만 켜두면 새 버전이
+나올 때 알림이 온다. 받은 파일을 갈아끼우는 건 그때 판단해서 하면 된다.
+
+### 핫링크는 권하지 않는다
+
+GitHub Pages에 배포된 절대 URL(`https://flvrdoyster.github.io/font/...`)을 CSS에
+직접 박아 방문자가 거기서 받아가게 할 수도 있다. CORS는 문제없다 — `@font-face`는
+이미지와 달리 크로스 오리진에 CORS가 필요한데 Pages가
+`access-control-allow-origin: *`를 보내주고 `content-type`도 `font/woff2`로 맞다.
+
+그래도 권하지 않는 이유는 **쓰는 쪽에서 손쓸 수 없는** 단점이라서다:
+
+- GitHub Pages는 CDN이 아니다. 대역폭·가용성 보장이 없고 `cache-control`이
+  `max-age=600`(10분)뿐이다.
+- 폰트가 예고 없이 바뀐다. 1.0.0에서 가나·한자 6,600여 자가 빠지고 ㅞ/ㅝ 계열
+  글리프 모양이 달라졌는데, 핫링크였다면 남의 사이트 렌더링이 그대로 따라
+  바뀌었을 것이다.
+
+반대로 직접 호스팅의 유일한 단점(업데이트를 놓침)은 위 릴리스 알림으로 해결된다.
+그래서 고칠 수 있는 쪽 단점을 택한다. 데모나 잠깐 시험해 보는 용도면 절대 URL이
+편하니 그때만 쓴다.
