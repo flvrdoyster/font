@@ -381,6 +381,36 @@ def blob_chars(corpus, lib):
                   and (out := compose(ch, lib)) and has_blob(out))
 
 
+def has_double_stem(rows):
+    """An exactly-2px-wide vertical run (both columns on, neither neighbor
+    column on, for >=2 consecutive rows). The Light stroke grammar says
+    vertical stems are 1px, and the corpus agrees absolutely: zero such runs
+    in all 4,156 confirmed hand-drawn syllables (measured 2026-08-03, at run
+    lengths 2/3/4 alike) -- so in composed output this is unconditionally an
+    extraction artifact, the blob's smaller sibling. The known failure mode is
+    two components that disagree about where a vowel's short leg sits by one
+    column (e.g. T:ㄲ(ㅟ) carried the leg at col 4 from its source syllable
+    while LV:ㄷㅟ draws it at col 5 -- composed 뒦 fused them into a 2px stem)."""
+    H, W = len(rows), len(rows[0])
+    on = lambda y, x: 0 <= x < W and rows[y][x] == "#"
+    for x in range(W - 1):
+        streak = 0
+        for y in range(H):
+            if on(y, x) and on(y, x + 1) and not on(y, x - 1) and not on(y, x + 2):
+                streak += 1
+                if streak >= 2:
+                    return True
+            else:
+                streak = 0
+    return False
+
+
+def double_stem_chars(corpus, lib):
+    """Composed syllables with a 2px stem -- same remedy as blob_chars."""
+    return sorted(ch for ch in FULL if ch not in corpus
+                  and (out := compose(ch, lib)) and has_double_stem(out))
+
+
 def cell_review_chars(corpus, lib):
     """One composed (never hand-drawn) syllable per LV/T cell -- every
     component the library can produce, in one legible-sized pass instead of
@@ -446,6 +476,9 @@ def main():
     ap.add_argument("--coverage", action="store_true")
     ap.add_argument("--missing", action="store_true")
     ap.add_argument("--blobs", action="store_true")
+    ap.add_argument("--stems", action="store_true",
+                    help="composed syllables with a 2px vertical stem (Light "
+                         "grammar violation, 0 in confirmed corpus)")
     ap.add_argument("--cellreview", action="store_true")
     ap.add_argument("--freeze", action="store_true",
                     help="write tools/component_library.json (the build reads "
@@ -546,6 +579,11 @@ def main():
     if args.blobs:
         chars = blob_chars(corpus, lib)
         print(f"\ncomposed with a 3x3 blob -- draw these by hand ({len(chars)}): "
+              + " ".join(chars))
+
+    if args.stems:
+        chars = double_stem_chars(corpus, lib)
+        print(f"\ncomposed with a 2px vertical stem -- draw these by hand ({len(chars)}): "
               + " ".join(chars))
 
     if args.cellreview:

@@ -83,18 +83,24 @@ def apply(ufo, ascender, descender, cap_height, x_height, style="Regular"):
     info.openTypeOS2WidthClass = 5
 
     # Vertical metrics (baseline at bottom of the 16px cell; no descenders by
-    # design). Small line gap for legible line spacing.
-    line_gap = 2 * 64
+    # design). Line gap is 0 ON PURPOSE: ascender-descender alone spans exactly
+    # one 16px cell, so default line spacing is exactly 1em -- consecutive
+    # lines sit on the same 16px grid the PC-98 terminal used (Hangul keeps
+    # 1px of air top and bottom inside the cell, so ink never touches). A
+    # nonzero hhea/typo gap used to make line height 18px on gap-honoring
+    # platforms while usWin metrics stayed 16px -- the same text measured
+    # differently per platform (fontbakery WARN hhea). Every metrics pair now
+    # agrees: asc 1024 / desc 0 / gap 0.
     info.ascender = ascender
     info.descender = descender
     info.capHeight = cap_height
     info.xHeight = x_height
     info.openTypeHheaAscender = ascender
     info.openTypeHheaDescender = descender
-    info.openTypeHheaLineGap = line_gap
+    info.openTypeHheaLineGap = 0
     info.openTypeOS2TypoAscender = ascender
     info.openTypeOS2TypoDescender = descender
-    info.openTypeOS2TypoLineGap = line_gap
+    info.openTypeOS2TypoLineGap = 0
     info.openTypeOS2WinAscent = ascender
     info.openTypeOS2WinDescent = abs(descender)
 

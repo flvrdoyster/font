@@ -565,16 +565,22 @@ def component_cells():
                                key=lambda ch: pc98(ch) is None)[:12],
         })
 
-    # Composed syllables with a 3x3 blob: every cell they need is filled, so
-    # they never show up as an empty cell above, but the union still isn't
-    # something a hand-drawn glyph would ever produce (see has_blob). The fix
+    # Composed syllables whose output contains a shape hand-drawn glyphs are
+    # proven never to produce: every cell they need is filled, so they never
+    # show up as an empty cell above, but the union is still wrong. Two such
+    # sieves exist, both validated the same way (zero hits in the confirmed
+    # corpus): a filled 3x3 blob (has_blob) and an exactly-2px vertical stem
+    # (has_double_stem -- the Light grammar is 1px stems). The fix for either
     # is to draw the syllable itself, which overrides the composition outright
     # -- same "그릴 것" action as an empty cell, just anchored on a whole
     # syllable instead of a jamo, so it rides the same list/filter/badge.
     lib = {cell: cand.most_common(1)[0][0] for cell, cand in seen.items()}
-    for ch in cc.blob_chars(corpus, lib):
+    flagged = {ch: "벽돌" for ch in cc.blob_chars(corpus, lib)}
+    for ch in cc.double_stem_chars(corpus, lib):
+        flagged.setdefault(ch, "2px 줄기")
+    for ch, kind in sorted(flagged.items()):
         out.append({
-            "id": f"SYL:{ch}", "kind": "벽돌", "jamo": ch, "beol": "—",
+            "id": f"SYL:{ch}", "kind": kind, "jamo": ch, "beol": "—",
             "samples": 0, "affects": 1, "suggest": ch, "resolvable": True,
             "stuck": False, "examples": [],
         })

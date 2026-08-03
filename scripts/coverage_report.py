@@ -26,8 +26,8 @@ Korean encodings picked the ones on the right:
 import sys
 from fontTools.ttLib import TTFont
 
-# Bold member has the full 11,172-Hangul coverage; Regular (1px) covers the
-# 2,350 KS X 1001 set. Default to Bold for the widest cmap check.
+# Regular and Bold have had identical cmaps since build_ufo.py's _in_scope()
+# (2026-08-03) -- checking one checks both. Default picked arbitrarily.
 FONT = sys.argv[1] if len(sys.argv) > 1 else "build/DokkaebiDNRGothic-Bold.ttf"
 
 SETS = {
