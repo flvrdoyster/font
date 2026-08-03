@@ -228,9 +228,20 @@ def build_light(proportional=False):
     with open(cl.REFS, encoding="utf-8") as f:
         refs = json.load(f)
 
-    latin_src = cg.load_src()
+    # Despite the name, glyphs_bold.json now also carries compat jamo and a
+    # handful of Bold-only Hangul corrections (bold_consistency_check.py) --
+    # not just Latin/numbers/symbols. Hangul syllables are skipped here: they
+    # get their own dedicated pass below (light_hangul, via cc.compose), so
+    # processing them here too would be wasted work that the {**light_latin,
+    # **light_hangul} merge just throws away -- and it was silently inflating
+    # this loop's counters, which used to mean "Latin" literally. Jamo has no
+    # such dedicated pass (cc.FULL is syllables only), so it still relies on
+    # this one; the loop is accurately "everything in glyphs_bold.json that
+    # isn't a Hangul syllable" now, not "Latin."
+    non_hangul_src = {ch: grid for ch, grid in cg.load_src().items()
+                      if not (len(ch) == 1 and 0xAC00 <= ord(ch) <= 0xD7A3)}
     light_latin_src, latin_hand, latin_thinned = {}, 0, 0
-    for ch, grid in latin_src.items():
+    for ch, grid in non_hangul_src.items():
         if len(ch) == 1 and _excluded_codepoint(ord(ch)):
             continue
         if ch in refs:
@@ -282,7 +293,7 @@ def build_light(proportional=False):
         added += 1
 
     print(f"  light: {added} glyphs added "
-          f"({latin_hand} Latin/numbers hand-drawn + {latin_thinned} thinned, "
+          f"({latin_hand} Latin/numbers/jamo hand-drawn + {latin_thinned} thinned, "
           f"{hand} Hangul hand-drawn + {gaps} composed)")
     return ufo
 

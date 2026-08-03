@@ -239,6 +239,7 @@
       <button class="ptab" data-cat="hangul" role="tab" aria-selected="false">한글</button>
       <button class="ptab" data-cat="symbols" role="tab" aria-selected="false">기호</button>
       <button class="ptab" data-cat="cells" role="tab" aria-selected="false">부품 셀</button>
+      <button class="ptab" data-cat="boldissues" role="tab" aria-selected="false">결함</button>
     </div>
     <!-- Every category has the same shape: one scroll box, and inside it a
          .palette-group per set (sublabel + swatch grid). Latin used to have
@@ -294,6 +295,23 @@
           </div>
         </div>
         <p class="sublabel cell-affected" id="cellPrevEmpty">셀을 고르세요</p>
+      </div>
+    </div>
+    <!-- 결함: Bold(원본 비트맵 벡터화) 전용. 부품 셀과 달리 조합 모델이 없어서
+         "채울 빈칸"이 아니라 "원본이 엉뚱한 자모를 붙여넣은 것으로 의심되는
+         글자" 목록이다 -- scripts/bold_consistency_check.py. 손교정하면
+         glyphs_bold.json에 저장되고 목록에서 바로 빠진다. -->
+    <div class="palette-cat" data-cat="boldissues" hidden>
+      <div class="cellbar">
+        <span class="cp" id="boldIssueCount"></span>
+      </div>
+      <div class="cell-split">
+        <div class="cell-list">
+          <table class="celltable">
+            <thead><tr><th>글자</th><th>구성</th><th>플래그</th></tr></thead>
+            <tbody id="boldIssueRows"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -556,9 +574,30 @@
     paintGhost(document.getElementById("ghostSym"), rows, "--guide");
   }
   let refChar = "";
+  // paletteSource only knows the precomputed sets (완성형 2,350, Latin, jamo,
+  // symbols) -- same gap loadChar's own on-demand fetch works around, but
+  // 참고 needs its own cache since it's a second, independent character.
+  // Weight-scoped: 참고 shows the CURRENT weight's rendering (confirmed or
+  // composed), so a stale entry from before a weight switch would be wrong,
+  // not just missing.
+  let refCharCache = {};
+  function refCharGhostRows(ch) {
+    if (ch in refCharCache) return refCharCache[ch];
+    fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(ch), { cache: "no-store" })
+      .then(res => res.ok ? res.json() : null)
+      .then(j => {
+        refCharCache[ch] = (j && j.chars && j.chars[0] && j.chars[0].rows) || null;
+        if (ch === refChar) drawRefGhost();
+      })
+      .catch(() => { refCharCache[ch] = null; });
+    return null;
+  }
   function drawRefGhost() {
     let rows = null;
-    if (ghostOn && refChar && refChar !== curChar) rows = paletteSource(refChar);
+    if (ghostOn && refChar && refChar !== curChar) {
+      rows = paletteSource(refChar);
+      if (!rows && SERVER) rows = refCharGhostRows(refChar);
+    }
     paintGhost(document.getElementById("ghostRef2"), rows, "--guide2");
   }
   document.getElementById("refCharInput").addEventListener("input", e => {
@@ -804,6 +843,7 @@
     buildBtn.hidden = !on;
     bmpBtn.hidden = !on;
     syncCellsTab();          // 부품 셀 needs the server too
+    syncBoldIssuesTab();
   }
 
   async function fetchWeightData(weight) {
@@ -835,6 +875,7 @@
   async function switchWeight(weight) {
     if (weight === WEIGHT) return;
     WEIGHT = weight;
+    refCharCache = {};   // stale weight's compositions would be wrong, not just missing
     document.querySelectorAll(".wtab").forEach(b =>
       b.setAttribute("aria-selected", b.dataset.weight === weight ? "true" : "false"));
     if (SERVER) {
@@ -847,6 +888,7 @@
     }
     buildPalette();
     syncCellsTab();
+    syncBoldIssuesTab();
     loadChar(defaultCharFor(weight));
   }
   document.querySelectorAll(".wtab").forEach(b =>
@@ -859,6 +901,7 @@
     document.querySelectorAll(".palette-cat").forEach(el =>
       el.hidden = el.dataset.cat !== cat);
     if (cat === "cells" && !CELLS.length) refreshCells();
+    if (cat === "boldissues" && !BOLD_ISSUES.length) refreshBoldIssues();
   }
   document.querySelectorAll(".ptab").forEach(b =>
     b.addEventListener("click", () => selectCat(b.dataset.cat)));
@@ -878,12 +921,18 @@
   // The tab also needs the server: its list and preview are computed by
   // /api/cells and /api/cell_preview, so with the file opened directly it
   // would be a tab that silently shows an empty table.
-  function syncCellsTab() {
-    const tab = document.querySelector('.ptab[data-cat="cells"]');
-    const on = WEIGHT === "light" && SERVER;
+  // 부품 셀(Light 전용)과 결함(Bold 전용, 원본 벡터화라 조합 모델이 없어서
+  // /api/bold_issues라는 별도 엔드포인트를 씀) 둘 다 자기 웨이트에서만 탭을
+  // 보여주고, 웨이트가 바뀌어 숨겨질 때 그 탭을 보고 있었다면 한글 탭으로
+  // 돌려보낸다 -- 탭 자체가 사라졌는데 선택된 채로 남아있으면 안 되니까.
+  function syncWeightOnlyTab(cat, weight) {
+    const tab = document.querySelector(`.ptab[data-cat="${cat}"]`);
+    const on = WEIGHT === weight && SERVER;
     tab.hidden = !on;
     if (!on && tab.getAttribute("aria-selected") === "true") selectCat("hangul");
   }
+  const syncCellsTab = () => syncWeightOnlyTab("cells", "light");
+  const syncBoldIssuesTab = () => syncWeightOnlyTab("boldissues", "regular");
 
   // ---- 부품 셀 (11,172자 확장) ----
   // Was its own page/file; the drawing half was a duplicate of this editor's,
@@ -1009,6 +1058,38 @@
     renderCellList();
   }
 
+  // ---- 결함 (Bold consistency check, scripts/bold_consistency_check.py) ----
+  let BOLD_ISSUES = [];
+  const boldIssueRowsEl = document.getElementById("boldIssueRows");
+
+  function renderBoldIssueList() {
+    boldIssueRowsEl.innerHTML = "";
+    for (const c of BOLD_ISSUES) {
+      const tr = document.createElement("tr");
+      tr.className = "row";
+      tr.setAttribute("aria-selected", curChar === c.jamo ? "true" : "false");
+      tr.innerHTML =
+        `<td><span class="jamo">${c.jamo}</span></td>` +
+        `<td>${c.beol}</td><td><span class="pill empty">${c.kind}</span></td>`;
+      tr.addEventListener("click", () => loadChar(c.jamo).then(renderBoldIssueList));
+      boldIssueRowsEl.appendChild(tr);
+    }
+    document.getElementById("boldIssueCount").textContent = `${BOLD_ISSUES.length}자`;
+  }
+
+  async function refreshBoldIssues() {
+    if (!SERVER) return;
+    try {
+      const res = await fetch("api/bold_issues", { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text().catch(() => res.status));
+      BOLD_ISSUES = (await res.json()).cells || [];
+    } catch (e) {
+      showToast(`결함 목록 실패 · ${String(e.message || e)}`, "error");
+      return;
+    }
+    renderBoldIssueList();
+  }
+
   // ---- toast ----
   const toastsEl = document.getElementById("toasts");
   function showToast(message, kind) {
@@ -1046,6 +1127,9 @@
       await refreshCells();
       if (curCell) renderCellPreview(curChar);
     }
+    // Same idea for 결함: a saved correction should drop off the list, not
+    // sit there looking unfixed until the tab is reopened.
+    if (BOLD_ISSUES.length) await refreshBoldIssues();
     return j;
   }
 
@@ -1109,6 +1193,7 @@
   // ---- init ----
   buildPalette();
   syncCellsTab();
+  syncBoldIssuesTab();
   loadChar("A");
   connect().then(() => {
     // /components redirects here with #cells so old bookmarks land on the tab

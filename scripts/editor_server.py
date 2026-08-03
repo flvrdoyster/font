@@ -36,6 +36,13 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              counts, affected-syllable counts, and a suggested
                              representative syllable to draw. Backs the 부품 셀
                              palette tab (/components redirects to it).
+  GET  /api/bold_issues   -> Bold's equivalent worklist (scripts/
+                             bold_consistency_check.py): syllables where the
+                             original bitmap likely pasted in the wrong jamo,
+                             minus whatever glyphs_bold.json already
+                             overrides. Same entry shape as /api/cells' 벽돌/
+                             2px 줄기 flags so it rides the same list/filter/
+                             click-to-load UI -- see 결함 palette tab.
   POST /api/cell_preview  -> {ch, rows} -> composes the syllables built
                              from the cell(s) `ch` belongs to, against the
                              in-progress drawing. Confirmed syllables show
@@ -587,6 +594,57 @@ def component_cells():
     return out
 
 
+# ---- Bold consistency check (see scripts/bold_consistency_check.py) --------
+# Bold has no equivalent to Light's 부품 셀 worklist -- it isn't composed from
+# a cell model, it's a direct vectorization of the original bitmap, so there
+# is nothing to "fill." What it needs instead is this: candidates where the
+# original bitmap itself pasted the wrong jamo shape into an otherwise-clean
+# glyph (docs/ROADMAP.md, "그 전에도 제법 수정"). Surfaced the same way as
+# Light's blob/2px-stem flags -- a syllable-anchored "그릴 것" entry -- so it
+# rides the same palette/filter/click-to-load pattern instead of a separate
+# UI.
+_BOLDCHECK = False   # False = not loaded; None = load failed; else the module
+
+
+def _boldcheck():
+    global _BOLDCHECK
+    if _BOLDCHECK is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "scripts"))
+            import bold_consistency_check
+            _BOLDCHECK = bold_consistency_check
+        except Exception:
+            _BOLDCHECK = None
+    return _BOLDCHECK
+
+
+def bold_issue_chars():
+    """Candidates from bold_consistency_check, minus whatever glyphs_bold.json
+    already overrides -- drawing a fix removes it from this list the same way
+    a confirmed syllable removes itself from Light's worklist."""
+    bc = _boldcheck()
+    if bc is None:
+        return []
+    strike, cmap = _orig()
+    top_cands, _canon = bc.find_candidates(strike, cmap)
+    bot_cands = bc.find_bottom_candidates(strike, cmap)
+    fixed = set(read_glyphs("regular"))   # regular = 2px = Bold, see GLYPHS_FILES
+
+    out = []
+    for ch in sorted(set(top_cands) | set(bot_cands)):
+        if ch in fixed:
+            continue
+        tag = ("T" if ch in top_cands else "") + ("B" if ch in bot_cands else "")
+        cho, jung, jong = _composer().decompose(ch)
+        out.append({
+            "id": f"SYL:{ch}", "kind": f"이상치({tag})", "jamo": ch,
+            "beol": f"{cho}+{jung}" + (f"+{jong}" if jong else ""),
+            "samples": 0, "affects": 1, "suggest": ch, "resolvable": True,
+            "stuck": False, "examples": [],
+        })
+    return out
+
+
 def cell_preview(ch, rows, cell_id=None, limit=400):
     """The syllables the drawn representative actually affects.
 
@@ -861,6 +919,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/cells":
             return self._send(200, json.dumps({"cells": component_cells()},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/bold_issues":
+            return self._send(200, json.dumps({"cells": bold_issue_chars()},
                                               ensure_ascii=False))
         if parsed.path in ("/half", "/half.html", "/half/"):
             with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
