@@ -22,6 +22,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              original, before finally falling back to that.
   GET  /api/ks2350        -> the 2,350 KS X 1001 완성형 syllables (char list),
                              for the editor's full-coverage Light palette.
+  GET  /api/jamoref?s=.. -> reference grids for 한글 호환 자모 (U+3130-318F),
+                             from the macOS Korean system font (Apple SD
+                             Gothic Neo). NOT the original bitmap -- its jamo
+                             are inherited glyphs this font no longer ships
+                             (see build_ufo.py _in_scope). Overlay only.
   GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from
                              DKBDinaru (~/Library/Fonts/DKBDinaru.ttf, local
                              machine only) -- native 16x16 pixel design.
@@ -692,6 +697,49 @@ def _dinaru():
     return _DINARU
 
 
+# Compat-jamo reference: Apple SD Gothic Neo, the macOS Korean system font.
+# Deliberately NOT the original bitmap, unlike every other Hangul view here.
+# The original does carry all 94 compat jamo, but those belong to the ~665
+# inherited glyphs that whoever assembled the distributed bitmap pulled in from
+# elsewhere -- they ignore this design's vertical band and are exactly what
+# build_ufo.py's _in_scope() now refuses to ship. Overlaying them would be
+# tracing the thing we just threw out.
+#
+# Picked over the alternatives on coverage: it maps all 51 modern jamo AND all
+# 42 archaic ones (ㅿ, ㆍ ...), and every one of the 93 fits the 16px cell
+# without clipping (measured). AppleGothic/Nanum/Koddi also cover them;
+# NotoSansGothic covers none. Reference only -- shapes are redrawn by hand,
+# never copied, same as every other ref here.
+JAMO_REF_TTC = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+_JAMO_REF = False
+
+
+def _jamo_ref_face():
+    global _JAMO_REF
+    if _JAMO_REF is False:
+        try:
+            import freetype
+            face = freetype.Face(JAMO_REF_TTC, 0)
+            face.set_pixel_sizes(0, REF_PX)
+            _JAMO_REF = face
+        except Exception:
+            _JAMO_REF = None
+    return _JAMO_REF
+
+
+def _is_compat_jamo(ch):
+    return 0x3130 <= ord(ch) <= 0x318F
+
+
+def jamo_ref_grids(s):
+    """Per-char grids for the compat-jamo overlay. Only answers for compat
+    jamo -- anything else gets None so a stray request can't quietly overlay a
+    system-font shape onto a glyph that has a proper reference of its own."""
+    return [{"ch": ch,
+             "rows": _face_grid(_jamo_ref_face(), ch) if _is_compat_jamo(ch) else None}
+            for ch in s]
+
+
 def _ref_width(cp):
     """8 for halfwidth ASCII/punctuation/jamo, 16 otherwise -- matches the editor's
     own widthFor() so the overlay lines up with the canvas it's drawn under,
@@ -792,6 +840,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/symref":
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": sym_ref_grids(s)},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/jamoref":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": jamo_ref_grids(s)},
                                               ensure_ascii=False))
         if parsed.path in ("/components", "/components.html", "/components/"):
             # The component-cell editor is now the main editor's 부품 셀 palette

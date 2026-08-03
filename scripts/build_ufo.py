@@ -66,6 +66,38 @@ def _excluded_codepoint(cp):
     return any(lo <= cp <= hi for lo, hi in _CONTROL_RANGES + _KANA_RANGES)
 
 
+HANGUL_SYLLABLES = (0xAC00, 0xD7A3)
+
+
+def _in_scope(cp):
+    """What this typeface actually claims to be: Hangul, plus whatever has been
+    drawn by hand.
+
+    The original HANKBC bitmap is not a design we own. Its Hangul IS -- that is
+    the Dokkaebi Dinaru face this project vectorizes -- but the file also
+    carries ~665 other glyphs (Greek, Cyrillic, circled numbers, bracketed
+    Hangul, box-drawing variants) that whoever assembled the distributed bitmap
+    threw in from elsewhere. They do not follow this design's vertical band:
+    Hangul and the hand-drawn Latin sit in a consistent 13-row / 11-row band,
+    while those sit at rows 0-14, 1-14, 2-14 with no shared baseline and run
+    edge to edge across the cell. Shipping them as ours would be passing off
+    someone else's mismatched glyphs as this typeface.
+
+    They only ever reached the font through build()'s pass over the whole
+    strike, which is why they landed in Bold and never in Regular -- the two
+    members disagreed by 669 characters, so Cmd+B changed which characters
+    existed. Scoping the strike pass fixes both problems at once.
+
+    Anything genuinely wanted is drawn by hand and lands in glyphs_bold.json /
+    glyphs_light.json, which this rule always admits -- that is how the Latin,
+    digits, punctuation and core box-drawing already ship in both weights."""
+    if cp is None:
+        return False
+    if HANGUL_SYLLABLES[0] <= cp <= HANGUL_SYLLABLES[1]:
+        return True
+    return cp in cg.GLYPHS
+
+
 def _expected_blank(cp):
     """Whitespace/format characters are legitimately blank. Anything else
     (symbols, letters, punctuation) that's blank in the original bitmap was
@@ -107,7 +139,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
         _add_space(ufo, cmap)
 
     added = 0
-    skipped_control = skipped_blank = 0
+    skipped_control = skipped_blank = skipped_scope = 0
     seen_cps = set()
     for gname in wanted:
         if gname in (".notdef", "space") or gname in ufo:
@@ -120,6 +152,9 @@ def build(chars=None, all_glyphs=False, proportional=False):
         # scope or unshippable outright, so a drawing does not earn them a place.
         if _excluded_codepoint(cp):
             skipped_control += 1
+            continue
+        if not _in_scope(cp):                  # inherited, not ours -- see _in_scope
+            skipped_scope += 1
             continue
         if cp in cg.GLYPHS:                    # hand-drawn override
             width_px, rows = cg.GLYPHS[cp]
@@ -165,6 +200,9 @@ def build(chars=None, all_glyphs=False, proportional=False):
     if skipped_control or skipped_blank:
         print(f"  skipped {skipped_control} control-char/soft-hyphen/kana codepoints, "
               f"{skipped_blank} blank-in-original codepoints (e.g. registered, Euro)")
+    if skipped_scope:
+        print(f"  skipped {skipped_scope} inherited non-Hangul glyphs from the "
+              f"original bitmap (not this typeface's design -- see _in_scope)")
     if extra:
         print(f"  +{extra} hand-drawn glyphs with no original-strike counterpart")
     return ufo

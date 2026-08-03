@@ -259,6 +259,10 @@
     <div class="palette-cat" data-cat="hangul" hidden>
       <div class="palette-scroll">
         <div class="palette-group">
+          <p class="sublabel">한글 호환 자모 — 현대 51 + 옛한글 42 (93자)</p>
+          <div class="palette" id="paletteJamo"></div>
+        </div>
+        <div class="palette-group">
           <p class="sublabel">한글 완성형 (KS X 1001, 2,350자)</p>
           <div class="palette" id="paletteAll2350"></div>
         </div>
@@ -321,6 +325,13 @@
     return ch;
   }
   const FULL_CHARS = Array.from(HALF_CHARS).map(toFullwidth).join("");
+  // 한글 호환 자모 U+3131-U+318E 전체 93자 -- 현대 자모 51(ㄱ~ㅎ, ㅏ~ㅣ. ㅋㅋ/ㅠㅠ가
+  // 여기다)에 옛한글 자모 42(ㅿ 반시옷, ㆍ 아래아 등)까지. 블록 양끝 U+3130/U+318F는
+  // 미배정이고, U+3164는 HANGUL FILLER -- 모양이 없는 게 정의인 글자라 그릴 게 없어
+  // 팔레트에서만 뺀다(빈 글리프로 실을지는 별개 판단).
+  const JAMO_CHARS = Array.from({ length: 0x318E - 0x3131 + 1 },
+                                (_, i) => String.fromCodePoint(0x3131 + i))
+                          .filter(c => c !== "\u3164");
   // 자주 쓰는 기호 -- ASCII 반각 문장부호/전각 대응 + scripts/coverage_report.py의
   // 큐레이션 세트(SETS)와 동일한 8개 그룹. 폰트에 이미 있는(원본 벡터화 또는
   // 손그림) 기호를 편집할 수 있게 하는 게 목적이라, 여기 없는 기호를 추가하고
@@ -474,9 +485,15 @@
   //    CURRENT weight, so a similar already-drawn glyph can be traced against.
   //  - blue (#ghostSym, --guide): DKBDinaru, for symbols/punctuation only
   //    (see /api/symref). Shape reference; still redrawn by hand.
+  // 호환 자모는 참조 소스가 다르다 -- 원본 비트맵의 자모는 이 폰트가 더는 싣지
+  // 않는 상속 글리프라(build_ufo.py _in_scope) 시스템 폰트를 대신 깐다.
+  function isCompatJamo(ch) {
+    const c = ch.codePointAt(0);
+    return c >= 0x3130 && c <= 0x318F;
+  }
   function isHangul(ch) {
     const c = ch.codePointAt(0);
-    return (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3130 && c <= 0x318F);
+    return (c >= 0xAC00 && c <= 0xD7A3) || isCompatJamo(ch);
   }
   // Everything that isn't Hangul gets the DKBDinaru reference: Latin,
   // digits, punctuation, currency, math, arrows, box drawing, blocks, shapes.
@@ -503,6 +520,7 @@
   const refText = w => ch => `api/text?weight=${w}&s=` + encodeURIComponent(ch);
   const boldRef = refFetcher(refText("regular"));
   const symRef = refFetcher(ch => "api/symref?s=" + encodeURIComponent(ch));
+  const jamoRef = refFetcher(ch => "api/jamoref?s=" + encodeURIComponent(ch));
   function paintGhost(cv, rows, colorVar) {
     const px = 22;
     cv.width = W * px; cv.height = H * px;
@@ -519,10 +537,14 @@
   }
   function drawGhost() {
     let rows = null;
-    if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
-      // Bold on purpose, unthinned: it shows the original skeleton as drawn,
-      // and deciding which stroke survives the 1px reduction is a visual call
-      // to make against it, not something to pre-apply.
+    if (ghostOn && isCompatJamo(curChar) && WEIGHT !== "light") {
+      // Bold 탭: 시스템 폰트(Apple SD Gothic Neo). Bold 93자가 이제 다 그려져
+      // 있지만, 다시 손볼 때 여전히 참고할 독립 소스로 남겨둔다.
+      rows = jamoRef(curChar);
+    } else if (ghostOn && WEIGHT === "light" && isHangul(curChar)) {
+      // Light 탭(자모 포함): Bold를 얇혀 내려오는 나머지 한글과 동일하게, 이제
+      // 실제로 그려진 Bold 93자가 골격이다 -- 자모도 여기서부턴 다른 한글과
+      // 다를 것 없는 케이스라 시스템 폰트 특례가 필요 없다.
       rows = boldRef(curChar);
     }
     paintGhost(document.getElementById("ghost"), rows, "--ink");
@@ -616,6 +638,7 @@
   function buildPalette() {
     buildPaletteGroup("paletteHalf", Array.from(HALF_CHARS));
     buildPaletteGroup("paletteFull", Array.from(FULL_CHARS));
+    buildPaletteGroup("paletteJamo", JAMO_CHARS);
     buildPaletteGroup("paletteAll2350", KS2350_CHARS);
     ensureSymbolGroupsDom();
     for (const [key, , chars] of SYMBOL_GROUPS)
@@ -626,7 +649,7 @@
     // just follows the active weight (server fills unsaved glyphs per weight).
     paletteData = {};
     const symbolChars = SYMBOL_GROUPS.map(([, , chars]) => chars).join("");
-    const chars = HALF_CHARS + FULL_CHARS + KS2350_CHARS.join("") + symbolChars;
+    const chars = HALF_CHARS + FULL_CHARS + JAMO_CHARS.join("") + KS2350_CHARS.join("") + symbolChars;
     try {
       const res = await fetch("api/text?weight=" + WEIGHT + "&s=" + encodeURIComponent(chars),
                               { cache: "no-store" });

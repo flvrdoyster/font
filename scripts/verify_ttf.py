@@ -63,8 +63,11 @@ def render_mono(face, cp, width):
 def expected_bold():
     """cp -> (width, rows): original bitmap, with glyphs_bold.json hand
     corrections winning, skipping what build_ufo.py's build() itself skips
-    (control chars, soft hyphen, legitimately-blank-only-if-whitespace) --
-    otherwise a codepoint the font never ships shows up as a fake mismatch."""
+    (out-of-scope inherited glyphs, control chars, soft hyphen, kana,
+    legitimately-blank-only-if-whitespace) -- otherwise a codepoint the font
+    never ships shows up as a fake mismatch. Mirror build()'s order exactly:
+    the scope and exclusion rules are checked BEFORE the hand-drawn override,
+    so a drawing cannot smuggle an out-of-scope codepoint back in here either."""
     orig = TTFont("original/HANKBC.ttf")
     strike = pf.read_strike(orig)
     cmap = orig.getBestCmap()
@@ -73,10 +76,10 @@ def expected_bold():
         if gname not in strike:
             continue
         width, rows = strike[gname]
+        if bu._excluded_codepoint(cp) or not bu._in_scope(cp):
+            continue
         if cp in cg.GLYPHS:
             width, rows = cg.GLYPHS[cp]
-        elif bu._excluded_codepoint(cp):
-            continue
         elif not any(rows) and not bu._expected_blank(cp):
             continue
         if width == 0:
