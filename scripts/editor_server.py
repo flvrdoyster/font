@@ -90,8 +90,11 @@ hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
                              halfwidth_char_map.json says the current slot is
 
 Also serves tools/text_preview.html at /preview -- type any string and see it
-set in the current saved glyphs (via /api/text) side by side, no font build
-involved. For catching things a single-glyph view can't: relative spacing
+set in the current saved glyphs (via /api/text), no font build involved but
+laid out with the build's own numbers: each glyph at its proportional
+advance/shift (tools/spacing.py, included per char in /api/text) plus pair
+kerning (GET /api/kern_pairs?weight=.. -> the effective table from tools/
+kerning.py). For catching things a single-glyph view can't: relative spacing
 between specific neighboring characters.
 
 Stdlib only. Run from the repo root.
@@ -103,6 +106,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -110,6 +114,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
 TEXT_PREVIEW = os.path.join(ROOT, "tools", "text_preview.html")
+KERNING_EDITOR = os.path.join(ROOT, "tools", "kerning_editor.html")
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
@@ -135,6 +140,12 @@ PREVIEW_PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<title>미리 써보기</title>" + _CSS_LINK + "</head><body>"
+)
+
+KERNING_PAGE_HEAD = (
+    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>커닝 검수</title>" + _CSS_LINK + "</head><body>"
 )
 
 
@@ -289,8 +300,38 @@ def text_grids(weight, s):
                     grid = tv.thin_vertical(grid)
                 except Exception:
                     pass
-        out.append({"ch": ch, "rows": grid})
+        # adv/shift: the same numbers build_ufo writes into hmtx, so /preview
+        # lays glyphs out like the built font instead of raw stored cells --
+        # the raw-cell rendering showed spacing the shipped font doesn't have.
+        adv = shift = None
+        if ch in ("\x20", "\xa0"):   # space + NBSP, one glyph in the build
+            adv, shift = 8, 0   # build_ufo._add_space hardcodes 8px
+        elif grid is not None:
+            spm = _spacing()
+            if spm is not None:
+                try:
+                    bits = [int(r.replace("#", "1").replace(".", "0"), 2)
+                            for r in grid]
+                    adv, shift = spm.proportional(len(grid[0]), bits, ord(ch))
+                except Exception:
+                    adv = shift = None
+        out.append({"ch": ch, "rows": grid, "adv": adv, "shift": shift})
     return out
+
+
+_SPACING = False   # False = not loaded; None = load failed; else the module
+
+
+def _spacing():
+    global _SPACING
+    if _SPACING is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import spacing
+            _SPACING = spacing
+        except Exception:
+            _SPACING = None
+    return _SPACING
 
 
 
@@ -645,6 +686,93 @@ def bold_issue_chars():
     return out
 
 
+# ---- kerning (tools/kerning.py) ---------------------------------------------
+_KERNING = False   # False = not loaded; None = load failed; else the module
+
+
+def _kerning():
+    global _KERNING
+    if _KERNING is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import kerning
+            _KERNING = kerning
+        except Exception:
+            _KERNING = None
+    return _KERNING
+
+
+def kerning_worklist(weight, n=150):
+    """Class-pair kerning sorted by |adjustment|, one representative glyph
+    pair per class-pair -- mirrors 부품 셀/결함's "worklist, not everything"
+    shape (thousands of raw pairs is not a list a human reads). An override
+    saved for the representative pair applies to just that pair, same as any
+    other kerning override (see tools/kerning.py) -- adjusting the
+    representative does not retune the whole class."""
+    kn = _kerning()
+    if kn is None:
+        return {"pairs": [], "summary": {}}
+    chars = kn.kernable_chars(weight)
+    chars, right_of, left_of = kn.build_classes(chars)
+    right_sizes = Counter(c[2] for c in chars.values())
+    left_sizes = Counter(c[3] for c in chars.values())
+    rep_of_right, rep_of_left = {}, {}
+    for ch, (w, b, rc, lc) in chars.items():
+        rep_of_right.setdefault(rc, ch)
+        rep_of_left.setdefault(lc, ch)
+
+    overrides = kn.load_overrides(weight)
+    entries = []
+    for rc, rprof in right_of.items():
+        for lc, lprof in left_of.items():
+            v = kn.pair_kern(rprof, lprof)
+            if not v:
+                continue
+            x, y = rep_of_right[rc], rep_of_left[lc]
+            key = f"{x}\t{y}"
+            entries.append({
+                "x": x, "y": y, "computed": v, "override": overrides.get(key),
+                "effective": overrides.get(key, v),
+                "class_size": right_sizes[rc] * left_sizes[lc],
+            })
+    entries.sort(key=lambda e: abs(e["effective"]), reverse=True)
+    return {
+        "pairs": entries[:n],
+        "summary": {"kernable_chars": len(chars), "class_pairs": len(entries)},
+    }
+
+
+def kerning_pair_info(weight, x, y):
+    """Full detail for one specific glyph pair, looked up on demand -- the
+    worklist above only shows one representative per class, so reviewing any
+    OTHER member (or any pair typed into the page's own search field) goes
+    through this instead."""
+    kn = _kerning()
+    if kn is None:
+        return {"error": "kerning module unavailable"}
+    chars = kn.kernable_chars(weight)
+    if x not in chars or y not in chars:
+        missing = x if x not in chars else y
+        return {"error": f"{missing!r}은(는) 이 웨이트에서 커닝 대상이 아닙니다 "
+                          f"(한글이거나 전각이거나 잉크가 없음)"}
+    wx, bx = chars[x]
+    wy, by = chars[y]
+    rx, _ = kn.profiles(wx, bx, ord(x))
+    _, ly = kn.profiles(wy, by, ord(y))
+    computed = kn.pair_kern(rx, ly)
+    override = kn.load_overrides(weight).get(f"{x}\t{y}")
+
+    def to_rows(width, bits):
+        return ["".join("#" if row & (1 << (width - 1 - c)) else "." for c in range(width))
+                for row in bits]
+
+    return {
+        "x": x, "y": y, "computed": computed, "override": override,
+        "effective": override if override is not None else computed,
+        "rows_x": to_rows(wx, bx), "rows_y": to_rows(wy, by),
+    }
+
+
 def cell_preview(ch, rows, cell_id=None, limit=400):
     """The syllables the drawn representative actually affects.
 
@@ -898,6 +1026,17 @@ class Handler(BaseHTTPRequestHandler):
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": text_grids(weight, s)},
                                               ensure_ascii=False))
+        if parsed.path == "/api/kern_pairs":
+            # Whole effective table at once (a few hundred entries), because
+            # /api/text is keyed by UNIQUE chars -- pair values can't ride it.
+            weight = self._weight_qs(qs)
+            kn = _kerning()
+            pairs = {}
+            if kn is not None:
+                pairs = {f"{x}\t{y}": v
+                         for (x, y), v in kn.effective_pairs(weight).items()}
+            return self._send(200, json.dumps({"pairs": pairs},
+                                              ensure_ascii=False))
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
                                               ensure_ascii=False))
@@ -931,6 +1070,23 @@ class Handler(BaseHTTPRequestHandler):
             with open(TEXT_PREVIEW, encoding="utf-8") as f:
                 page = PREVIEW_PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path in ("/kerning", "/kerning.html", "/kerning/"):
+            with open(KERNING_EDITOR, encoding="utf-8") as f:
+                page = KERNING_PAGE_HEAD + f.read() + PAGE_TAIL
+            return self._send(200, page, "text/html; charset=utf-8")
+        if parsed.path == "/api/kerning":
+            weight = self._weight_qs(qs)
+            n = int((qs.get("n") or ["150"])[0])
+            return self._send(200, json.dumps(kerning_worklist(weight, n),
+                                              ensure_ascii=False))
+        if parsed.path == "/api/kerning_pair":
+            weight = self._weight_qs(qs)
+            s = qs.get("s", [""])[0]
+            chars = list(s)[:2]
+            if len(chars) != 2:
+                return self._send(400, json.dumps({"error": "s must be 2 characters"}))
+            return self._send(200, json.dumps(kerning_pair_info(weight, *chars),
+                                              ensure_ascii=False))
         if parsed.path == "/api/halfwidth_ref":
             return self._send(200, json.dumps({"slots": halfwidth_ref_slots()},
                                               ensure_ascii=False))
@@ -960,6 +1116,32 @@ class Handler(BaseHTTPRequestHandler):
             data.update(incoming)
             write_glyphs(weight, data)
             return self._send(200, json.dumps({"saved": list(incoming), "total": len(data)}))
+        if parsed.path == "/api/kerning_override":
+            try:
+                body = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return self._send(400, json.dumps({"error": f"bad json: {e}"}))
+            weight = body.get("weight")
+            x, y = body.get("x"), body.get("y")
+            if weight not in GLYPHS_FILES or not x or not y:
+                return self._send(400, json.dumps({"error": "weight, x, y required"}))
+            kn = _kerning()
+            if kn is None:
+                return self._send(500, json.dumps({"error": "kerning module unavailable"}))
+            all_over = {}
+            if os.path.exists(kn.OVERRIDES_FILE):
+                all_over = json.load(open(kn.OVERRIDES_FILE, encoding="utf-8"))
+            bucket = all_over.setdefault(weight, {})
+            key = f"{x}\t{y}"
+            if "value" in body and body["value"] is not None:
+                bucket[key] = int(body["value"])
+            else:
+                bucket.pop(key, None)   # reset -> back to the computed class value
+            with open(kn.OVERRIDES_FILE, "w", encoding="utf-8") as f:
+                json.dump(all_over, f, ensure_ascii=False, indent=1, sort_keys=True)
+                f.write("\n")
+            return self._send(200, json.dumps(kerning_pair_info(weight, x, y),
+                                              ensure_ascii=False))
         if parsed.path == "/api/build":
             weight = self._weight_qs(qs)
             ok, log = run_build(weight)
@@ -1092,6 +1274,7 @@ PAGES = [
     ("메인 에디터", "/"),
     ("반각 한글 에디터", "/half"),
     ("미리 써보기", "/preview"),
+    ("커닝 검수", "/kerning"),
 ]
 
 

@@ -70,7 +70,8 @@
 
   let WEIGHT = "light";
   let SCALE = Number(scaleEl.value);
-  const cache = {}; // WEIGHT -> { ch: rows|null }
+  const cache = {};     // WEIGHT -> { ch: {rows, adv, shift}|null }
+  const kernCache = {}; // WEIGHT -> { "X\tY": px }
 
   function showToast(message, kind) {
     const el = document.createElement("div");
@@ -88,20 +89,25 @@
     }, life);
   }
 
-  function glyphCanvas(ch, rows) {
+  function glyphCanvas(ch, info) {
+    // Canvas width is the glyph's ADVANCE and ink lands at its x_shift --
+    // the same numbers build_ufo writes into the font -- so this page shows
+    // the spacing the built font actually has, not the raw stored cells.
     const wrap = document.createElement("span");
     wrap.className = "glyph";
     const cv = document.createElement("canvas");
-    const w = rows ? rows[0].length : 16;
+    const rows = info ? info.rows : null;
+    const w = rows ? (info.adv ?? rows[0].length) : 16;
     cv.width = w; cv.height = 16;
     cv.style.height = (16 * SCALE) + "px";
     cv.style.width = (w * SCALE) + "px";
     if (rows) {
       const ctx = cv.getContext("2d");
       ctx.fillStyle = "#191c22";
+      const shift = info.shift || 0;
       for (let y = 0; y < 16; y++)
-        for (let x = 0; x < w; x++)
-          if (rows[y][x] === "#") ctx.fillRect(x, y, 1, 1);
+        for (let x = 0; x < rows[0].length; x++)
+          if (rows[y][x] === "#") ctx.fillRect(x + shift, y, 1, 1);
     } else {
       cv.title = ch + " (없음)";
       cv.style.opacity = "0.15";
@@ -119,25 +125,46 @@
                               { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text().catch(() => res.status));
       const j = await res.json();
-      for (const c of j.chars) bucket[c.ch] = c.rows || null;
+      for (const c of j.chars) bucket[c.ch] = c.rows ? c : null;
     } catch (e) {
       showToast(`불러오기 실패 · ${String(e.message || e)}`, "error");
     }
   }
 
+  async function fetchKern() {
+    if (kernCache[WEIGHT]) return;
+    try {
+      const res = await fetch("api/kern_pairs?weight=" + WEIGHT, { cache: "no-store" });
+      kernCache[WEIGHT] = (await res.json()).pairs || {};
+    } catch (e) {
+      kernCache[WEIGHT] = {};
+    }
+  }
+
   function render() {
     const bucket = cache[WEIGHT] || {};
+    const kern = kernCache[WEIGHT] || {};
     linesEl.innerHTML = "";
     for (const line of input.value.split("\n")) {
       const lineEl = document.createElement("div");
       lineEl.className = "line";
-      for (const ch of line) lineEl.appendChild(glyphCanvas(ch, bucket[ch]));
+      let prev = null;
+      for (const ch of line) {
+        const el = glyphCanvas(ch, bucket[ch]);
+        const k = prev === null ? 0 : (kern[prev + "\t" + ch] || 0);
+        if (k) el.style.marginLeft = (k * SCALE) + "px";
+        lineEl.appendChild(el);
+        prev = ch;
+      }
       linesEl.appendChild(lineEl);
     }
   }
 
   async function refresh() {
-    await fetchMissing([...input.value].filter(ch => ch !== "\n"));
+    await Promise.all([
+      fetchMissing([...input.value].filter(ch => ch !== "\n")),
+      fetchKern(),
+    ]);
     render();
   }
 

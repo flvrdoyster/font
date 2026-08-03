@@ -17,6 +17,7 @@ import os
 import json
 import sys
 import unicodedata
+from collections import defaultdict
 from fontTools.ttLib import TTFont
 import ufoLib2
 from ufoLib2.objects import Glyph
@@ -29,6 +30,7 @@ import customglyphs as cg
 import thin_vertical as tv
 import compose_light as cl   # sibling script; scripts/ is sys.path[0] when run directly
 import compose_components as cc
+import kerning as kn
 
 UPEM = 1024
 ASCENDER = 1024      # cell top; baseline at bottom of the 16px cell
@@ -141,6 +143,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
     added = 0
     skipped_control = skipped_blank = skipped_scope = 0
     seen_cps = set()
+    gname_of_cp = {}   # for _write_kerning -- Bold keeps the strike's own names
     for gname in wanted:
         if gname in (".notdef", "space") or gname in ufo:
             continue
@@ -170,6 +173,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
         if cp is not None:
             glyph.unicodes = [cp]
             seen_cps.add(cp)
+            gname_of_cp[cp] = gname
         contours = pf.pixels_to_contours(width_px, rows)
         if shift_px:
             dx = shift_px * pf.PX
@@ -194,6 +198,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
             continue
         _add_verbatim(ufo, cp, width_px, rows, proportional)
         seen_cps.add(cp)
+        gname_of_cp[cp] = f"uni{cp:04X}"
         added += 1
         extra += 1
 
@@ -205,6 +210,7 @@ def build(chars=None, all_glyphs=False, proportional=False):
               f"original bitmap (not this typeface's design -- see _in_scope)")
     if extra:
         print(f"  +{extra} hand-drawn glyphs with no original-strike counterpart")
+    _write_kerning(ufo, "regular", gname_of_cp)
     return ufo
 
 
@@ -295,6 +301,8 @@ def build_light(proportional=False):
     print(f"  light: {added} glyphs added "
           f"({latin_hand} Latin/numbers/jamo hand-drawn + {latin_thinned} thinned, "
           f"{hand} Hangul hand-drawn + {gaps} composed)")
+    gname_of_cp = {cp: f"uni{cp:04X}" for cp in {**light_latin, **light_hangul}}
+    _write_kerning(ufo, "light", gname_of_cp)
     return ufo
 
 
@@ -325,6 +333,47 @@ def _add_verbatim(ufo, cp, width_px, rows, proportional):
         contours = [[(x + dx, y) for x, y in c] for c in contours]
     _draw(glyph, contours)
     ufo.addGlyph(glyph)
+
+
+def _write_kerning(ufo, weight, gname_of_cp):
+    """Write tools/kerning.py's measured table as real UFO kerning: classes
+    in ufo.groups (public.kern1.* / public.kern2.*, the UFO3 convention
+    ufo2ft's kern feature writer looks for), values in ufo.kerning. Hand
+    overrides (tools/kerning_overrides.json, see the editor's 커닝 tab) are
+    written as glyph-level pairs on top -- OpenType kerning lookup already
+    prefers the more specific match over a class rule, so no class needs
+    reshuffling to carve an exception out.
+
+    gname_of_cp: {codepoint: glyph name actually used in THIS ufo} -- Bold
+    keeps the original strike's PostScript names (A, V, zero, ...) while
+    Regular always uses uniXXXX (see build()/build_light()), so the two
+    weights don't share a naming scheme and this has to be passed in rather
+    than assumed. Only codepoints with an entry here can receive kerning --
+    correctly shrinks the table to whatever subset --subset actually built."""
+    table, classes = kn.kern_table(weight)
+    right_members, left_members = defaultdict(list), defaultdict(list)
+    for ch, (rc, lc) in classes.items():
+        gname = gname_of_cp.get(ord(ch))
+        if gname is None or gname not in ufo:
+            continue
+        right_members[rc].append(gname)
+        left_members[lc].append(gname)
+    for rc, members in right_members.items():
+        ufo.groups[f"public.kern1.{rc}"] = sorted(members)
+    for lc, members in left_members.items():
+        ufo.groups[f"public.kern2.{lc}"] = sorted(members)
+    for (rc, lc), v in table.items():
+        if rc in right_members and lc in left_members:
+            ufo.kerning[(f"public.kern1.{rc}", f"public.kern2.{lc}")] = v * pf.PX
+
+    for key, v in kn.load_overrides(weight).items():
+        x, y = key.split("\t")
+        gx, gy = gname_of_cp.get(ord(x)), gname_of_cp.get(ord(y))
+        if gx in ufo and gy in ufo:
+            if v:
+                ufo.kerning[(gx, gy)] = v * pf.PX
+            else:
+                ufo.kerning.pop((gx, gy), None)   # override says "no kern here"
 
 
 def _add_notdef(ufo):
