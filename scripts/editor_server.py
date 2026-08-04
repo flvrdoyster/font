@@ -9,6 +9,12 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              (colour tokens, page shell, card/button/status
                              pill/toast) both this page and /half link
                              to. Page-specific CSS stays inline in each file.
+  GET  /preview_presets.js -> tools/preview_presets.js, the preset sample
+                             texts (body/en/game/symbols/jamo) web/index.html
+                             loads via <script src>. web/ has no server of
+                             its own, so .github/workflows/webfont.yml copies
+                             this file into _site/ at deploy time; this route
+                             covers the same page served locally (/preview).
   GET  /api/glyphs?weight=regular|light
                           -> current glyphs_<weight>.json { "A": [rows], ... }
   POST /api/glyphs?weight=regular|light
@@ -89,13 +95,17 @@ hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
                              (red) for whichever character the editor's
                              halfwidth_char_map.json says the current slot is
 
-Also serves tools/text_preview.html at /preview -- type any string and see it
-set in the current saved glyphs (via /api/text), no font build involved but
-laid out with the build's own numbers: each glyph at its proportional
-advance/shift (tools/spacing.py, included per char in /api/text) plus pair
-kerning (GET /api/kern_pairs?weight=.. -> the effective table from tools/
-kerning.py). For catching things a single-glyph view can't: relative spacing
-between specific neighboring characters.
+Also serves web/index.html -- THE specimen page, same file GitHub Pages
+deploys -- at /preview, with tools/preview_local.js injected before </body>.
+That script is the entire local/public difference: it adds a second render
+box that draws the CURRENT SAVED glyphs (via /api/text, no font build
+involved) laid out with the build's own numbers -- proportional advance/
+shift (tools/spacing.py, included per char in /api/text) plus pair kerning
+(GET /api/kern_pairs?weight=.. -> the effective table from tools/
+kerning.py). The textarea above it keeps rendering through the last BUILT
+woff2 (served from build/ at the same URLs the public page uses), so the
+page shows built-vs-saved side by side. For catching things a single-glyph
+view can't: relative spacing between specific neighboring characters.
 
 Stdlib only. Run from the repo root.
 """
@@ -106,15 +116,24 @@ import subprocess
 import sys
 import threading
 import webbrowser
-from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
-TEXT_PREVIEW = os.path.join(ROOT, "tools", "text_preview.html")
-KERNING_EDITOR = os.path.join(ROOT, "tools", "kerning_editor.html")
+WEB_INDEX = os.path.join(ROOT, "web", "index.html")
+PREVIEW_LOCAL_JS = os.path.join(ROOT, "tools", "preview_local.js")
+# /preview's textarea renders through the same @font-face URLs the public
+# page uses; serve them from build/ so "what a visitor gets" is literally
+# the last build. Missing file (never built / no webfont pass yet) -> 404,
+# and the page degrades to its fallback font with the status pill saying so.
+WEBFONT_FILES = {
+    "/DokkaebiDNRGothic-Regular.woff2":
+        os.path.join(ROOT, "build", "DokkaebiDNRGothic-Regular.woff2"),
+    "/DokkaebiDNRGothic-Bold.woff2":
+        os.path.join(ROOT, "build", "DokkaebiDNRGothic-Bold.woff2"),
+}
 GLYPHS_FILES = {
     "regular": os.path.join(ROOT, "tools", "glyphs_bold.json"),  # 2px stems
     "light": os.path.join(ROOT, "tools", "glyphs_light.json"),   # 1px stems
@@ -122,6 +141,7 @@ GLYPHS_FILES = {
 
 EDITOR_CSS = os.path.join(ROOT, "tools", "editor.css")
 _CSS_LINK = "<link rel=\"stylesheet\" href=\"editor.css\">"
+PREVIEW_PRESETS_JS = os.path.join(ROOT, "tools", "preview_presets.js")
 
 PAGE_HEAD = (
     "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
@@ -135,19 +155,6 @@ HALFWIDTH_PAGE_HEAD = (
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<title>반각 한글 에디터</title>" + _CSS_LINK + "</head><body>"
 )
-
-PREVIEW_PAGE_HEAD = (
-    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<title>미리 써보기</title>" + _CSS_LINK + "</head><body>"
-)
-
-KERNING_PAGE_HEAD = (
-    "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<title>커닝 검수</title>" + _CSS_LINK + "</head><body>"
-)
-
 
 def _weight_file(weight):
     path = GLYPHS_FILES.get(weight)
@@ -687,6 +694,9 @@ def bold_issue_chars():
 
 
 # ---- kerning (tools/kerning.py) ---------------------------------------------
+# The module that MEASURES kerning lives in tools/ and is consumed by the
+# build (scripts/build_ufo.py); the only thing this server does with it is
+# /api/kern_pairs, so /preview can lay glyphs out with the build's numbers.
 _KERNING = False   # False = not loaded; None = load failed; else the module
 
 
@@ -700,77 +710,6 @@ def _kerning():
         except Exception:
             _KERNING = None
     return _KERNING
-
-
-def kerning_worklist(weight, n=150):
-    """Class-pair kerning sorted by |adjustment|, one representative glyph
-    pair per class-pair -- mirrors 부품 셀/결함's "worklist, not everything"
-    shape (thousands of raw pairs is not a list a human reads). An override
-    saved for the representative pair applies to just that pair, same as any
-    other kerning override (see tools/kerning.py) -- adjusting the
-    representative does not retune the whole class."""
-    kn = _kerning()
-    if kn is None:
-        return {"pairs": [], "summary": {}}
-    chars = kn.kernable_chars(weight)
-    chars, right_of, left_of = kn.build_classes(chars)
-    right_sizes = Counter(c[2] for c in chars.values())
-    left_sizes = Counter(c[3] for c in chars.values())
-    rep_of_right, rep_of_left = {}, {}
-    for ch, (w, b, rc, lc) in chars.items():
-        rep_of_right.setdefault(rc, ch)
-        rep_of_left.setdefault(lc, ch)
-
-    overrides = kn.load_overrides(weight)
-    entries = []
-    for rc, rprof in right_of.items():
-        for lc, lprof in left_of.items():
-            v = kn.pair_kern(rprof, lprof)
-            if not v:
-                continue
-            x, y = rep_of_right[rc], rep_of_left[lc]
-            key = f"{x}\t{y}"
-            entries.append({
-                "x": x, "y": y, "computed": v, "override": overrides.get(key),
-                "effective": overrides.get(key, v),
-                "class_size": right_sizes[rc] * left_sizes[lc],
-            })
-    entries.sort(key=lambda e: abs(e["effective"]), reverse=True)
-    return {
-        "pairs": entries[:n],
-        "summary": {"kernable_chars": len(chars), "class_pairs": len(entries)},
-    }
-
-
-def kerning_pair_info(weight, x, y):
-    """Full detail for one specific glyph pair, looked up on demand -- the
-    worklist above only shows one representative per class, so reviewing any
-    OTHER member (or any pair typed into the page's own search field) goes
-    through this instead."""
-    kn = _kerning()
-    if kn is None:
-        return {"error": "kerning module unavailable"}
-    chars = kn.kernable_chars(weight)
-    if x not in chars or y not in chars:
-        missing = x if x not in chars else y
-        return {"error": f"{missing!r}은(는) 이 웨이트에서 커닝 대상이 아닙니다 "
-                          f"(한글이거나 전각이거나 잉크가 없음)"}
-    wx, bx = chars[x]
-    wy, by = chars[y]
-    rx, _ = kn.profiles(wx, bx, ord(x))
-    _, ly = kn.profiles(wy, by, ord(y))
-    computed = kn.pair_kern(rx, ly)
-    override = kn.load_overrides(weight).get(f"{x}\t{y}")
-
-    def to_rows(width, bits):
-        return ["".join("#" if row & (1 << (width - 1 - c)) else "." for c in range(width))
-                for row in bits]
-
-    return {
-        "x": x, "y": y, "computed": computed, "override": override,
-        "effective": override if override is not None else computed,
-        "rows_x": to_rows(wx, bx), "rows_y": to_rows(wy, by),
-    }
 
 
 def cell_preview(ch, rows, cell_id=None, limit=400):
@@ -1018,6 +957,18 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/editor.css":
             with open(EDITOR_CSS, encoding="utf-8") as f:
                 return self._send(200, f.read(), "text/css; charset=utf-8")
+        if parsed.path == "/preview_presets.js":
+            with open(PREVIEW_PRESETS_JS, encoding="utf-8") as f:
+                return self._send(200, f.read(), "application/javascript; charset=utf-8")
+        if parsed.path == "/preview_local.js":
+            with open(PREVIEW_LOCAL_JS, encoding="utf-8") as f:
+                return self._send(200, f.read(), "application/javascript; charset=utf-8")
+        if parsed.path in WEBFONT_FILES:
+            if os.path.exists(WEBFONT_FILES[parsed.path]):
+                with open(WEBFONT_FILES[parsed.path], "rb") as f:
+                    return self._send(200, f.read(), "font/woff2")
+            return self._send(404, json.dumps(
+                {"error": "webfont not built -- run scripts/build_webfont.py"}))
         if parsed.path == "/api/glyphs":
             weight = self._weight_qs(qs)
             return self._send(200, json.dumps(read_glyphs(weight), ensure_ascii=False))
@@ -1066,27 +1017,18 @@ class Handler(BaseHTTPRequestHandler):
             with open(HALFWIDTH_EDITOR, encoding="utf-8") as f:
                 page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
-        if parsed.path in ("/preview", "/preview.html", "/preview/"):
-            with open(TEXT_PREVIEW, encoding="utf-8") as f:
-                page = PREVIEW_PAGE_HEAD + f.read() + PAGE_TAIL
+        if parsed.path in ("/preview", "/preview.html"):
+            # web/index.html IS the preview page -- one file for the public
+            # specimen (GitHub Pages) and this local view. The only
+            # difference is the script injected here: preview_local.js adds
+            # the pre-build saved-glyph renderer (see its header comment).
+            # No PAGE_HEAD/PAGE_TAIL wrapping: unlike the tools/*.html
+            # fragments, this is a complete document already.
+            with open(WEB_INDEX, encoding="utf-8") as f:
+                page = f.read().replace(
+                    "</body>",
+                    "<script src=\"preview_local.js\"></script></body>")
             return self._send(200, page, "text/html; charset=utf-8")
-        if parsed.path in ("/kerning", "/kerning.html", "/kerning/"):
-            with open(KERNING_EDITOR, encoding="utf-8") as f:
-                page = KERNING_PAGE_HEAD + f.read() + PAGE_TAIL
-            return self._send(200, page, "text/html; charset=utf-8")
-        if parsed.path == "/api/kerning":
-            weight = self._weight_qs(qs)
-            n = int((qs.get("n") or ["150"])[0])
-            return self._send(200, json.dumps(kerning_worklist(weight, n),
-                                              ensure_ascii=False))
-        if parsed.path == "/api/kerning_pair":
-            weight = self._weight_qs(qs)
-            s = qs.get("s", [""])[0]
-            chars = list(s)[:2]
-            if len(chars) != 2:
-                return self._send(400, json.dumps({"error": "s must be 2 characters"}))
-            return self._send(200, json.dumps(kerning_pair_info(weight, *chars),
-                                              ensure_ascii=False))
         if parsed.path == "/api/halfwidth_ref":
             return self._send(200, json.dumps({"slots": halfwidth_ref_slots()},
                                               ensure_ascii=False))
@@ -1116,32 +1058,6 @@ class Handler(BaseHTTPRequestHandler):
             data.update(incoming)
             write_glyphs(weight, data)
             return self._send(200, json.dumps({"saved": list(incoming), "total": len(data)}))
-        if parsed.path == "/api/kerning_override":
-            try:
-                body = json.loads(raw)
-            except json.JSONDecodeError as e:
-                return self._send(400, json.dumps({"error": f"bad json: {e}"}))
-            weight = body.get("weight")
-            x, y = body.get("x"), body.get("y")
-            if weight not in GLYPHS_FILES or not x or not y:
-                return self._send(400, json.dumps({"error": "weight, x, y required"}))
-            kn = _kerning()
-            if kn is None:
-                return self._send(500, json.dumps({"error": "kerning module unavailable"}))
-            all_over = {}
-            if os.path.exists(kn.OVERRIDES_FILE):
-                all_over = json.load(open(kn.OVERRIDES_FILE, encoding="utf-8"))
-            bucket = all_over.setdefault(weight, {})
-            key = f"{x}\t{y}"
-            if "value" in body and body["value"] is not None:
-                bucket[key] = int(body["value"])
-            else:
-                bucket.pop(key, None)   # reset -> back to the computed class value
-            with open(kn.OVERRIDES_FILE, "w", encoding="utf-8") as f:
-                json.dump(all_over, f, ensure_ascii=False, indent=1, sort_keys=True)
-                f.write("\n")
-            return self._send(200, json.dumps(kerning_pair_info(weight, x, y),
-                                              ensure_ascii=False))
         if parsed.path == "/api/build":
             weight = self._weight_qs(qs)
             ok, log = run_build(weight)
@@ -1274,7 +1190,6 @@ PAGES = [
     ("메인 에디터", "/"),
     ("반각 한글 에디터", "/half"),
     ("미리 써보기", "/preview"),
-    ("커닝 검수", "/kerning"),
 ]
 
 

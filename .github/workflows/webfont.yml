@@ -56,6 +56,8 @@ jobs:
         run: |
           mkdir -p _site
           cp font/web/index.html _site/
+          cp font/tools/editor.css _site/
+          cp font/tools/preview_presets.js _site/
           cp font/build/DokkaebiDNRGothic-Regular.woff2 _site/
           cp font/build/DokkaebiDNRGothic-Bold.woff2 _site/
 
