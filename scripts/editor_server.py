@@ -33,9 +33,9 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                              Gothic Neo). NOT the original bitmap -- its jamo
                              are inherited glyphs this font no longer ships
                              (see build_ufo.py _in_scope). Overlay only.
-  GET  /api/symref?s=..   -> reference grids for symbols/punctuation, from
-                             DKBDinaru (~/Library/Fonts/DKBDinaru.ttf, local
-                             machine only) -- native 16x16 pixel design.
+  GET  /api/fixedsysref?s=..
+                          -> reference grids for Latin/digits/symbols, from
+                             Fixedsys Excelsior (refs/FSEX302.ttf, CC0).
                              Overlay only; never embedded in built output.
   GET  /api/cells         -> jamo-component cells for the 11,172 expansion
                              (scripts/compose_components.py): status, sample
@@ -736,21 +736,21 @@ def _pc98_grid_or_none():
     return cl.load_pc98()
 
 
-# Symbol/punctuation reference: DKBDinaru (~/Library/Fonts/DKBDinaru.ttf), a
-# 16-unitsPerEm pixel-native font -- and per its own name table, literally
-# Juwan Park's "Dokkaebi Dinaru" revival, independently made from the same source bitmap this whole
-# project descends from. So its default shapes already read as "ours."
-# Replaced two earlier tries: GNU Unifont's glyphs were too rough/misaligned
-# to trace from, and STHeiti Light (a macOS system CJK text face) rendered
-# clean but is proportional, not cell-native, so common ASCII symbols like
-# '#'/'%'/'@' overflowed the 8px halfwidth cell and got clipped. DKBDinaru's
-# own advances are already clean 8/16, so nothing overflows. It's a personal,
-# local-machine file (not vendored in the repo like the other refs, same
-# situation Unifont/STHeiti were in) -- covers everything but a handful of
-# rare marks (¯–—⁄‹›−∆℮ at last count; those overlay blank, same as any
-# other unmapped codepoint). Reference only: shapes are looked at and
-# redrawn by hand, never copied, same as every other ref here.
-DINARU_TTF = os.path.join(os.path.expanduser("~"), "Library", "Fonts", "DKBDinaru.ttf")
+# Latin/digit/symbol reference: Fixedsys Excelsior (kika/fixedsys, CC0),
+# an 8x16-cell descendant of the classic Windows monospace font. Measured
+# against ours (2026-08): our '@'/'*'/'"' turned out genuinely weaker (a
+# maze-like '@' instead of the classic single-loop shape, an oversized
+# 7-row '*' next to Fixedsys's compact 5-row one, a curled '"' instead of
+# straight parallel ticks) -- concrete gaps, not just a different style.
+# Fixedsys is monospace and 2px-cap-height-shorter than ours (ink rows 4-12
+# vs our 2-12 on the same row-12 baseline), and is missing 14 codepoints we
+# ship (⇐⇒⇔∏∫□▲△▼▽◆◇✓✔) -- so this is reference to redraw from at OUR
+# proportions, same as every other overlay here, never a straight import.
+# Vendored in refs/ (gitignored, CC0 so no redistribution concern, just kept
+# out of the build like the other local-only refs) rather than a
+# local-machine path like DKBDinaru was, since it's a small single file
+# fetched once rather than something already installed system-wide.
+FIXEDSYS_TTF = os.path.join(ROOT, "refs", "FSEX302.ttf")
 REF_PX = 16
 # The font's own baseline sits at row 14 of its 16-row cell; ours sits at row
 # 13 (editor guide), so text glyphs shift up by one. Cell-filling glyphs (box
@@ -758,20 +758,20 @@ REF_PX = 16
 # edge so runs connect, which is exactly how the original bitmap draws them
 # (verified: '┼' spans all 16 rows with its bar on row 7).
 REF_BASELINE_ROW = 13
-_DINARU = False   # False = not yet tried, None = load failed, else the face
+_FIXEDSYS = False   # False = not yet tried, None = load failed, else the face
 
 
-def _dinaru():
-    global _DINARU
-    if _DINARU is False:
+def _fixedsys():
+    global _FIXEDSYS
+    if _FIXEDSYS is False:
         try:
             import freetype
-            face = freetype.Face(DINARU_TTF)
+            face = freetype.Face(FIXEDSYS_TTF)
             face.set_pixel_sizes(0, REF_PX)
-            _DINARU = face
+            _FIXEDSYS = face
         except Exception:
-            _DINARU = None
-    return _DINARU
+            _FIXEDSYS = None
+    return _FIXEDSYS
 
 
 # Compat-jamo reference: Apple SD Gothic Neo, the macOS Korean system font.
@@ -846,9 +846,9 @@ def _face_grid(face, ch):
     # runs stop connecting.
     cell_glyph = 0x2500 <= ord(ch) <= 0x259F
     dy = (14 - slot.bitmap_top) if cell_glyph else (REF_BASELINE_ROW - slot.bitmap_top)
-    # DKBDinaru's own advances are already clean 8/16 (unlike a proportional
-    # text face), so this shouldn't trigger -- kept as a guard so a glyph
-    # that somehow doesn't fit is dropped instead of silently clipped.
+    # Reference faces used here (Fixedsys, Apple SD Gothic Neo) have clean
+    # 8/16 advances already, so this shouldn't trigger -- kept as a guard so
+    # a glyph that somehow doesn't fit is dropped instead of silently clipped.
     if slot.bitmap_left < 0 or slot.bitmap_left + bmp.width > grid_w:
         return None
     if dy < 0 or dy + bmp.rows > 16:
@@ -863,14 +863,16 @@ def _face_grid(face, ch):
     return ["".join(row) for row in grid]
 
 
-def _symbol_ref_grid(ch):
-    return _face_grid(_dinaru(), ch)
+def _fixedsys_ref_grid(ch):
+    return _face_grid(_fixedsys(), ch)
 
 
-def sym_ref_grids(s):
-    """Per-char pixel grids from the symbol/punctuation reference overlay
-    (DKBDinaru). Reference only, never embedded in built output."""
-    return [{"ch": ch, "rows": _symbol_ref_grid(ch)} for ch in s]
+def fixedsys_ref_grids(s):
+    """Per-char pixel grids from the Latin/digit/symbol reference overlay
+    (Fixedsys Excelsior). None for the ~14 codepoints it doesn't cover
+    (arrows, math, shapes, checks) -- same graceful gap as any other
+    reference here. Reference only, never embedded in built output."""
+    return [{"ch": ch, "rows": _fixedsys_ref_grid(ch)} for ch in s]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -923,9 +925,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
                                               ensure_ascii=False))
-        if parsed.path == "/api/symref":
+        if parsed.path == "/api/fixedsysref":
             s = qs.get("s", [""])[0]
-            return self._send(200, json.dumps({"chars": sym_ref_grids(s)},
+            return self._send(200, json.dumps({"chars": fixedsys_ref_grids(s)},
                                               ensure_ascii=False))
         if parsed.path == "/api/jamoref":
             s = qs.get("s", [""])[0]
