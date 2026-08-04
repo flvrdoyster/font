@@ -7,18 +7,21 @@
 // Each entry mixes character classes on purpose so a single preset can't
 // hide a spacing/kerning regression in the untested class: body mixes
 // Hangul + Latin + digits + punctuation + quotes; en is Latin-only (all 26
-// letters, three pangrams, so no letter's spacing goes unseen); game is the
-// project's actual deployment shape (gensei-pc98 HUD text: Hangul, Latin,
-// digits, brackets, punctuation together); symbols is punctuation/math/
-// box-drawing/blocks; jamo is bare consonants+vowels, which body/game never
-// exercise since real words always land on a composed syllable.
+// letters, and -- unlike a bare pangram -- punctuation spread across all
+// three lines instead of piled on one, so quote/comma/slash/dash/apostrophe/
+// hash/currency/parens spacing is each seen next to ordinary words, not just
+// next to each other); game is the project's actual deployment shape
+// (gensei-pc98 HUD text: Hangul, Latin, digits, brackets, punctuation
+// together); symbols is punctuation/math/box-drawing/blocks; jamo is bare
+// consonants+vowels, which body/game never exercise since real words always
+// land on a composed syllable.
 const PREVIEW_PRESETS = {
   body: "다람쥐 헌 쳇바퀴에 타고파. 조용한 새벽, 국물 맛이 퍽 깊다.\n" +
         "“어디까지 왔어?” (거의 다 왔지!) 3번 출구, 오전 10:45.\n" +
         "Retro pixel type: ABC abc 0123456789 #&@%",
-  en: "The quick brown fox jumps over the lazy dog.\n" +
-      "Pack my box with five dozen liquor jugs, Jack!\n" +
-      "Waltz, nymph, for quick jigs vex Bud. 0123456789",
+  en: "\"The quick brown fox,\" she said, \"jumps over the lazy dog!\"\n" +
+      "Pack my box w/ 5 dozen liquor jugs — Jack's order #2091.\n" +
+      "Total: $1,234.56 (40% off) · dev@studio.io · v1.0.2 [OK]",
   game: "HP 128/128  MP 42/50  Lv.17\n" +
         "［가방］ ［장비］ ［마법］ ［설정］\n" +
         "골드 9,999원  경험치 730/1,000\n" +

@@ -87,7 +87,17 @@
   .hero-word { font-family: "Dokkaebi DNR Gothic", monospace; font-weight: 400;
                font-size: clamp(40px, 8vw, 84px); line-height: 1.2; margin: 0;
                letter-spacing: 0.01em; color: var(--ink); }
-  .hero-sub { margin-top: 14px; font-size: 15px; color: var(--muted);
+  /* The Latin name is the same name in the other script, not a separate
+     heading -- it sits tight under the Hangul one and follows the weight
+     toggle with it (the script drives both), so the hero reads as one
+     two-script wordmark. Every value is set explicitly because h2's UA
+     defaults fight this: 1.5em sizing, 0.83em margins, and a direct
+     font-weight: bold that outranks .app's inherited 400. */
+  .hero-latin { font-family: "Dokkaebi DNR Gothic", monospace; font-weight: 400;
+                font-size: clamp(17px, 2.4vw, 24px); line-height: 1.2;
+                margin: 10px 0 0; letter-spacing: 0.01em; color: var(--ink); }
+
+  .hero-sub { margin-top: 18px; font-size: 15px; color: var(--muted);
               max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.6; }
 
   textarea { width: 100%; min-height: 130px; resize: vertical;
@@ -130,7 +140,8 @@
 
   <section class="hero">
     <h1 class="hero-word" id="heroWord">도깨비DNR 고딕</h1>
-    <p class="hero-sub">Dokkaebi DNR Gothic — 16×16 픽셀 격자에서 시작한 두 굵기(Regular 1px·Bold 2px)
+    <h2 class="hero-latin" id="heroLatin">Dokkaebi DNR Gothic</h2>
+    <p class="hero-sub">16×16 픽셀 격자에서 시작한 두 굵기(Regular 1px·Bold 2px)
       한글·라틴 고딕체. 미리 준비된 문구를 보거나 직접 입력해보세요.</p>
   </section>
 
@@ -182,6 +193,7 @@
   const inputCard = document.getElementById("inputCard");
   const previewBox = document.getElementById("previewBox");
   const heroWord = document.getElementById("heroWord");
+  const heroLatin = document.getElementById("heroLatin");
   const sizeRange = document.getElementById("sizeRange");
   const sizeLabel = document.getElementById("sizeLabel");
   const weightSeg = document.getElementById("weightSeg");
@@ -204,6 +216,7 @@
   function applyWeight(w) {
     previewBox.style.fontWeight = w;
     heroWord.style.fontWeight = w;
+    heroLatin.style.fontWeight = w;
     for (const btn of weightSeg.querySelectorAll("button"))
       btn.setAttribute("aria-pressed", btn.dataset.weight === String(w));
   }
