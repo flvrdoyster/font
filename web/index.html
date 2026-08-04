@@ -7,17 +7,14 @@
 <link rel="stylesheet" href="editor.css">
 <script src="preview_presets.js"></script>
 <style>
-  /* This file IS both pages: the public specimen (GitHub Pages -- the
-     .github/workflows/webfont.yml deploy copies it into _site/ with
-     editor.css, preview_presets.js and the woff2s) and the editor's own
-     /preview (scripts/editor_server.py serves this same file and injects
-     tools/preview_local.js before </body>, which adds a second render box
-     drawing the CURRENT SAVED glyphs -- pre-build data the webfont can't
-     show yet). There is no other preview page.
-
-     Contract with preview_local.js: the element ids tester / presets /
-     weightSeg / sizeRange / status and the PRESETS global stay stable --
-     that script hooks them by name and adds nothing else to this file.
+  /* This file IS both pages, byte-for-byte, no local-only addition: the
+     public specimen (GitHub Pages -- .github/workflows/webfont.yml copies
+     it into _site/ with editor.css, preview_presets.js and the woff2s) and
+     the editor's own /preview (scripts/editor_server.py serves this exact
+     file). What differs between the two is only which woff2s answer at
+     DokkaebiDNRGothic-{Regular,Bold}.woff2 -- the deployed webfont build vs.
+     whatever's in build/ locally -- so /preview always shows the last
+     build, not necessarily what's currently saved in glyphs_*.json.
 
      CSS here is page-specific only; shared tokens/.app/.topbar/.card/.btn/
      .status live in editor.css (the same file every editor page links). */
@@ -39,14 +36,21 @@
   .seg button + button { border-left: 1px solid var(--grid-line); }
   .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
-  textarea { width: 100%; min-height: 220px; resize: vertical; font: inherit;
+  textarea { width: 100%; min-height: 140px; resize: vertical; font: inherit;
              padding: 10px 12px; border: 1px solid var(--grid-line);
              border-radius: 8px; background: var(--panel); color: var(--ink);
-             font-family: "Dokkaebi DNR Gothic", monospace; line-height: 1.6; }
+             line-height: 1.6; }
 
-  .scale-row { display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  .scale-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
                font-size: 12px; color: var(--muted); }
   .scale-row input[type="range"] { width: 160px; }
+
+  /* The one thing on the page actually styled with the webfont -- input
+     above stays the page's own UI font on purpose (see the head comment),
+     so nothing here is typed directly, only rendered from it. */
+  #previewBox { font-family: "Dokkaebi DNR Gothic", monospace; line-height: 1.6;
+                white-space: pre-wrap; word-break: break-word; min-height: 60px;
+                padding: 4px 2px; color: var(--ink); }
 
   .hint { font-size: 13px; color: var(--muted); margin-top: 10px; }
   code { font-family: var(--mono); color: var(--accent); }
@@ -72,12 +76,16 @@
       <button type="button" data-preset="jamo">자모</button>
     </div>
     <textarea id="tester" spellcheck="false"></textarea>
+    <p class="hint">위 칸에 직접 타이핑하면 아래 미리보기에 실제 폰트로 반영됩니다.</p>
+  </div>
+
+  <div class="card" id="previewCard" style="margin-top: 16px;">
     <div class="scale-row">
       <label for="sizeRange">크기</label>
       <input type="range" id="sizeRange" min="12" max="96" step="1" value="32">
       <span id="sizeLabel">32px</span>
     </div>
-    <p class="hint">위 칸에 직접 타이핑해서 확인하세요. 굵기·크기는 위 컨트롤로 바꿉니다.</p>
+    <div id="previewBox"></div>
   </div>
 
   <div class="card" style="margin-top: 16px;">
@@ -93,6 +101,7 @@
 
 <script>
   const textarea = document.getElementById("tester");
+  const previewBox = document.getElementById("previewBox");
   const sizeRange = document.getElementById("sizeRange");
   const sizeLabel = document.getElementById("sizeLabel");
   const weightSeg = document.getElementById("weightSeg");
@@ -100,18 +109,19 @@
   const statusEl = document.getElementById("status");
 
   // 프리셋 텍스트는 preview_presets.js 하나뿐 -- 여긴 그 객체를 그대로 쓴다.
-  // 로컬(/preview)에서는 preview_local.js가 검수(내부 QA 전용) 프리셋을 여기에
-  // 얹는다 -- 그래서 const지만 객체 내용은 그 스크립트가 건드릴 수 있어야 한다.
   const PRESETS = PREVIEW_PRESETS;
 
   function applySize(px) {
-    textarea.style.fontSize = px + "px";
+    previewBox.style.fontSize = px + "px";
     sizeLabel.textContent = px + "px";
   }
   function applyWeight(w) {
-    textarea.style.fontWeight = w;
+    previewBox.style.fontWeight = w;
     for (const btn of weightSeg.querySelectorAll("button"))
       btn.setAttribute("aria-pressed", btn.dataset.weight === String(w));
+  }
+  function syncPreview() {
+    previewBox.textContent = textarea.value;
   }
 
   sizeRange.addEventListener("input", () => applySize(sizeRange.value));
@@ -119,14 +129,16 @@
     const btn = e.target.closest("button[data-weight]");
     if (btn) applyWeight(btn.dataset.weight);
   });
+  textarea.addEventListener("input", syncPreview);
   presetsEl.addEventListener("click", e => {
     const btn = e.target.closest("button[data-preset]");
-    if (btn) textarea.value = PRESETS[btn.dataset.preset];
+    if (btn) { textarea.value = PRESETS[btn.dataset.preset]; syncPreview(); }
   });
 
   applySize(sizeRange.value);
   applyWeight(400);
   textarea.value = PRESETS.body;
+  syncPreview();
 
   Promise.all([
     document.fonts.load('16px "Dokkaebi DNR Gothic"'),

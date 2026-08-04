@@ -96,16 +96,11 @@ hand-drawing 반각(halfwidth) Hangul, unrelated to the font build pipeline
                              halfwidth_char_map.json says the current slot is
 
 Also serves web/index.html -- THE specimen page, same file GitHub Pages
-deploys -- at /preview, with tools/preview_local.js injected before </body>.
-That script is the entire local/public difference: it adds a second render
-box that draws the CURRENT SAVED glyphs (via /api/text, no font build
-involved) laid out with the build's own numbers -- proportional advance/
-shift (tools/spacing.py, included per char in /api/text) plus pair kerning
-(GET /api/kern_pairs?weight=.. -> the effective table from tools/
-kerning.py). The textarea above it keeps rendering through the last BUILT
-woff2 (served from build/ at the same URLs the public page uses), so the
-page shows built-vs-saved side by side. For catching things a single-glyph
-view can't: relative spacing between specific neighboring characters.
+deploys -- at /preview, byte-for-byte, no local-only addition. It renders
+through the last BUILT woff2, served from build/ at the same URLs the
+public page uses (WEBFONT_FILES below) -- what shows up locally is
+literally the last build. For catching things a single-glyph view can't:
+relative spacing between specific neighboring characters.
 
 Stdlib only. Run from the repo root.
 """
@@ -123,11 +118,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(ROOT, "tools", "pixel_editor.html")
 HALFWIDTH_EDITOR = os.path.join(ROOT, "tools", "halfwidth_editor.html")
 WEB_INDEX = os.path.join(ROOT, "web", "index.html")
-PREVIEW_LOCAL_JS = os.path.join(ROOT, "tools", "preview_local.js")
-# /preview's textarea renders through the same @font-face URLs the public
-# page uses; serve them from build/ so "what a visitor gets" is literally
-# the last build. Missing file (never built / no webfont pass yet) -> 404,
-# and the page degrades to its fallback font with the status pill saying so.
+# /preview serves this exact file (see the route below), so its @font-face
+# needs these two URLs to resolve locally too -- serve them from build/ so
+# "what shows up" is literally the last build. Missing file (never built /
+# no webfont pass yet) -> 404, page falls back to its default font and the
+# status pill says so.
 WEBFONT_FILES = {
     "/DokkaebiDNRGothic-Regular.woff2":
         os.path.join(ROOT, "build", "DokkaebiDNRGothic-Regular.woff2"),
@@ -307,38 +302,8 @@ def text_grids(weight, s):
                     grid = tv.thin_vertical(grid)
                 except Exception:
                     pass
-        # adv/shift: the same numbers build_ufo writes into hmtx, so /preview
-        # lays glyphs out like the built font instead of raw stored cells --
-        # the raw-cell rendering showed spacing the shipped font doesn't have.
-        adv = shift = None
-        if ch in ("\x20", "\xa0"):   # space + NBSP, one glyph in the build
-            adv, shift = 8, 0   # build_ufo._add_space hardcodes 8px
-        elif grid is not None:
-            spm = _spacing()
-            if spm is not None:
-                try:
-                    bits = [int(r.replace("#", "1").replace(".", "0"), 2)
-                            for r in grid]
-                    adv, shift = spm.proportional(len(grid[0]), bits, ord(ch))
-                except Exception:
-                    adv = shift = None
-        out.append({"ch": ch, "rows": grid, "adv": adv, "shift": shift})
+        out.append({"ch": ch, "rows": grid})
     return out
-
-
-_SPACING = False   # False = not loaded; None = load failed; else the module
-
-
-def _spacing():
-    global _SPACING
-    if _SPACING is False:
-        try:
-            sys.path.insert(0, os.path.join(ROOT, "tools"))
-            import spacing
-            _SPACING = spacing
-        except Exception:
-            _SPACING = None
-    return _SPACING
 
 
 
@@ -693,25 +658,6 @@ def bold_issue_chars():
     return out
 
 
-# ---- kerning (tools/kerning.py) ---------------------------------------------
-# The module that MEASURES kerning lives in tools/ and is consumed by the
-# build (scripts/build_ufo.py); the only thing this server does with it is
-# /api/kern_pairs, so /preview can lay glyphs out with the build's numbers.
-_KERNING = False   # False = not loaded; None = load failed; else the module
-
-
-def _kerning():
-    global _KERNING
-    if _KERNING is False:
-        try:
-            sys.path.insert(0, os.path.join(ROOT, "tools"))
-            import kerning
-            _KERNING = kerning
-        except Exception:
-            _KERNING = None
-    return _KERNING
-
-
 def cell_preview(ch, rows, cell_id=None, limit=400):
     """The syllables the drawn representative actually affects.
 
@@ -960,9 +906,6 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/preview_presets.js":
             with open(PREVIEW_PRESETS_JS, encoding="utf-8") as f:
                 return self._send(200, f.read(), "application/javascript; charset=utf-8")
-        if parsed.path == "/preview_local.js":
-            with open(PREVIEW_LOCAL_JS, encoding="utf-8") as f:
-                return self._send(200, f.read(), "application/javascript; charset=utf-8")
         if parsed.path in WEBFONT_FILES:
             if os.path.exists(WEBFONT_FILES[parsed.path]):
                 with open(WEBFONT_FILES[parsed.path], "rb") as f:
@@ -976,17 +919,6 @@ class Handler(BaseHTTPRequestHandler):
             weight = self._weight_qs(qs)
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": text_grids(weight, s)},
-                                              ensure_ascii=False))
-        if parsed.path == "/api/kern_pairs":
-            # Whole effective table at once (a few hundred entries), because
-            # /api/text is keyed by UNIQUE chars -- pair values can't ride it.
-            weight = self._weight_qs(qs)
-            kn = _kerning()
-            pairs = {}
-            if kn is not None:
-                pairs = {f"{x}\t{y}": v
-                         for (x, y), v in kn.effective_pairs(weight).items()}
-            return self._send(200, json.dumps({"pairs": pairs},
                                               ensure_ascii=False))
         if parsed.path == "/api/ks2350":
             return self._send(200, json.dumps({"chars": ks2350_chars()},
@@ -1018,17 +950,13 @@ class Handler(BaseHTTPRequestHandler):
                 page = HALFWIDTH_PAGE_HEAD + f.read() + PAGE_TAIL
             return self._send(200, page, "text/html; charset=utf-8")
         if parsed.path in ("/preview", "/preview.html"):
-            # web/index.html IS the preview page -- one file for the public
-            # specimen (GitHub Pages) and this local view. The only
-            # difference is the script injected here: preview_local.js adds
-            # the pre-build saved-glyph renderer (see its header comment).
-            # No PAGE_HEAD/PAGE_TAIL wrapping: unlike the tools/*.html
-            # fragments, this is a complete document already.
+            # web/index.html IS the preview page, served byte-for-byte --
+            # one file for the public specimen (GitHub Pages) and this local
+            # view, no local-only addition. No PAGE_HEAD/PAGE_TAIL wrapping:
+            # unlike the tools/*.html fragments, this is a complete document
+            # already.
             with open(WEB_INDEX, encoding="utf-8") as f:
-                page = f.read().replace(
-                    "</body>",
-                    "<script src=\"preview_local.js\"></script></body>")
-            return self._send(200, page, "text/html; charset=utf-8")
+                return self._send(200, f.read(), "text/html; charset=utf-8")
         if parsed.path == "/api/halfwidth_ref":
             return self._send(200, json.dumps({"slots": halfwidth_ref_slots()},
                                               ensure_ascii=False))
