@@ -7,79 +7,159 @@
 <link rel="stylesheet" href="editor.css">
 <script src="preview_presets.js"></script>
 <style>
-  /* This file IS both pages, byte-for-byte, no local-only addition: the
-     public specimen (GitHub Pages -- .github/workflows/webfont.yml copies
-     it into _site/ with editor.css, preview_presets.js and the woff2s) and
-     the editor's own /preview (scripts/editor_server.py serves this exact
-     file). What differs between the two is only which woff2s answer at
-     DokkaebiDNRGothic-{Regular,Bold}.woff2 -- the deployed webfont build vs.
-     whatever's in build/ locally -- so /preview always shows the last
-     build, not necessarily what's currently saved in glyphs_*.json.
+  /* This file IS both pages, served byte-for-byte to each: the public
+     specimen (GitHub Pages -- .github/workflows/webfont.yml copies it into
+     _site/ with editor.css, preview_presets.js and the woff2s) and the
+     editor's own /preview (scripts/editor_server.py serves this exact file,
+     injecting nothing). Two things differ at RUNTIME, not in the file:
+     which woff2s answer at DokkaebiDNRGothic-{Regular,Bold}.woff2 (the
+     deployed build vs. whatever is in build/ locally -- so /preview shows
+     the last BUILD, not necessarily what is saved in glyphs_*.json), and
+     the status pill, which the script switches on for localhost only.
 
      CSS here is page-specific only; shared tokens/.app/.topbar/.card/.btn/
      .status live in editor.css (the same file every editor page links). */
+  /* font-display: swap -- on a specimen page the font IS the content, so the
+     default (block: up to 3s of INVISIBLE text) would show a blank hero and
+     blank preview to anyone on a slow connection. Swapping through the
+     fallback is the lesser evil: text is readable immediately and the
+     status pill above already tells you when the real font has landed. */
   @font-face {
     font-family: "Dokkaebi DNR Gothic";
     src: url("DokkaebiDNRGothic-Regular.woff2") format("woff2");
     font-weight: 400;
+    font-display: swap;
   }
   @font-face {
     font-family: "Dokkaebi DNR Gothic";
     src: url("DokkaebiDNRGothic-Bold.woff2") format("woff2");
     font-weight: 700;
+    font-display: swap;
   }
 
+  /* Pixel font everywhere on this page EXCEPT the two places it'd hurt
+     legibility of what's functionally a code sample: the free-typing
+     textarea (opts out below) and the @font-face snippet (already pinned to
+     var(--mono) on its own selector, so it's untouched by this). Fixed at
+     Regular/400 regardless of the weight toggle -- that toggle is about
+     what the SPECIMEN (#heroWord/#previewBox) demonstrates, not the page's
+     own chrome; UI text has no "bold" state to switch to here. .status gets
+     its own copy of this because editor.css already sets its font-family
+     directly (same specificity, this rule wins by appearing later). */
+  .app { font-family: "Dokkaebi DNR Gothic", monospace; font-weight: 400; }
+  .status { font-family: "Dokkaebi DNR Gothic", monospace; font-weight: 400; }
+
+  /* max-width + auto-scroll instead of letting the pills shrink: at 320px the
+     six preset buttons were squeezing their labels onto two lines ("본/문",
+     "게임/UI"). nowrap keeps every label on one line and the group scrolls
+     sideways when it can't fit. */
+  /* The hidden ATTRIBUTE only works through the UA stylesheet's display:none,
+     which any author-level display rule outranks -- editor.css's
+     `.topbar { display: flex }` was doing exactly that and leaving the
+     local-only status bar visible in public. Restore it for everything. */
+  [hidden] { display: none !important; }
+
   .seg { display: inline-flex; border: 1px solid var(--grid-line); border-radius: 8px;
-         overflow: hidden; }
+         overflow-x: auto; max-width: 100%; }
   .seg button { border: 0; background: var(--panel); color: var(--muted);
-                font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer; }
+                font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer;
+                white-space: nowrap; flex: none; }
   .seg button + button { border-left: 1px solid var(--grid-line); }
   .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
-  textarea { width: 100%; min-height: 140px; resize: vertical; font: inherit;
+  /* Cards get a touch more room and a hairline shadow here -- this page is
+     the public face, tools/*.html are dense working screens, so the two
+     are allowed to feel different even sharing editor.css's tokens. */
+  .app .card { padding: 22px 24px; box-shadow: 0 1px 2px rgba(25, 28, 34, 0.04); }
+  .app .card + .card { margin-top: 18px; }
+
+  /* These three sit right on the page background -- no white box -- while
+     keeping the .card class for its layout/spacing (margin-top above,
+     nothing else depends on it here). Everything actually visible inside
+     each (the .seg pill group, the textarea, #previewBox) draws its own
+     chrome already, so there's no bare unstyled content underneath. */
+  #selectCard, #inputCard, #previewCard { background: none; border: none; box-shadow: none; padding: 0; }
+
+  .hero { text-align: center; padding: 52px 12px 40px; }
+  /* h1, so the page has exactly one -- but styled from scratch, since the
+     browser default margin/size and editor.css's .topbar h1 rule (which
+     doesn't reach here) both fight the hero sizing. */
+  .hero-word { font-family: "Dokkaebi DNR Gothic", monospace; font-weight: 400;
+               font-size: clamp(40px, 8vw, 84px); line-height: 1.2; margin: 0;
+               letter-spacing: 0.01em; color: var(--ink); }
+  .hero-sub { margin-top: 14px; font-size: 15px; color: var(--muted);
+              max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+  textarea { width: 100%; min-height: 130px; resize: vertical;
+             font-family: var(--sans); font-size: 15px; font-weight: 400;
              padding: 10px 12px; border: 1px solid var(--grid-line);
              border-radius: 8px; background: var(--panel); color: var(--ink);
-             line-height: 1.6; }
+             line-height: 1.2; }
 
-  .scale-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  .scale-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
                font-size: 12px; color: var(--muted); }
   .scale-row input[type="range"] { width: 160px; }
 
   /* The one thing on the page actually styled with the webfont -- input
      above stays the page's own UI font on purpose (see the head comment),
      so nothing here is typed directly, only rendered from it. */
-  #previewBox { font-family: "Dokkaebi DNR Gothic", monospace; line-height: 1.6;
+  #previewBox { font-family: "Dokkaebi DNR Gothic", monospace; line-height: 1.2;
                 white-space: pre-wrap; word-break: break-word; min-height: 60px;
                 padding: 4px 2px; color: var(--ink); }
 
-  .hint { font-size: 13px; color: var(--muted); margin-top: 10px; }
-  code { font-family: var(--mono); color: var(--accent); }
+  .hint { font-size: 13px; color: var(--muted); }
+  .foot { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--faint); }
+  .foot .hint + .hint { margin-top: 8px; }
+  .foot a { color: var(--accent); }
+
+  .code-block { background: var(--cell-off); border: 1px solid var(--faint);
+                border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  .code-block code { font-family: var(--mono); font-size: 12.5px; line-height: 1.2;
+                      color: var(--ink); white-space: pre; }
+  .code-block .str { color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <h1>도깨비DNR 고딕 / Dokkaebi DNR Gothic</h1>
-    <div class="seg" id="weightSeg" role="tablist" aria-label="굵기">
-      <button type="button" data-weight="400" aria-pressed="true">Regular</button>
-      <button type="button" data-weight="700" aria-pressed="false">Bold</button>
-    </div>
+  <!-- 로컬(/preview)에서만 보인다 -- 아래 스크립트가 호스트를 보고 켠다.
+       빌드된 woff2가 실제로 떴는지 확인하는 작업용 표시라, 폰트가 항상
+       같이 배포되는 공개 페이지에선 방문자에게 의미가 없다. -->
+  <header class="topbar" id="localBar" hidden>
     <span class="status" id="status">불러오는 중…</span>
   </header>
 
-  <div class="card">
-    <div class="seg" id="presets" style="margin-bottom: 10px;">
-      <button type="button" data-preset="body">본문</button>
-      <button type="button" data-preset="en">영문</button>
-      <button type="button" data-preset="game">게임 UI</button>
-      <button type="button" data-preset="symbols">기호</button>
-      <button type="button" data-preset="jamo">자모</button>
+  <section class="hero">
+    <h1 class="hero-word" id="heroWord">도깨비DNR 고딕</h1>
+    <p class="hero-sub">Dokkaebi DNR Gothic — 16×16 픽셀 격자에서 시작한 두 굵기(Regular 1px·Bold 2px)
+      한글·라틴 고딕체. 미리 준비된 문구를 보거나 직접 입력해보세요.</p>
+  </section>
+
+  <div class="card" id="selectCard">
+    <!-- role="group", not "tablist": a tablist's children must be role="tab"
+         with aria-selected, and these are plain toggle buttons reporting
+         aria-pressed. Mixing the two makes screen readers announce a tab
+         list whose tabs it can't find. group + aria-label keeps the naming
+         without claiming a widget pattern this isn't. -->
+    <div class="seg" id="presets" role="group" aria-label="문구 선택">
+      <button type="button" data-preset="body" aria-pressed="true">본문</button>
+      <button type="button" data-preset="en" aria-pressed="false">영문</button>
+      <button type="button" data-preset="game" aria-pressed="false">게임 UI</button>
+      <button type="button" data-preset="symbols" aria-pressed="false">기호</button>
+      <button type="button" data-preset="jamo" aria-pressed="false">자모</button>
+      <button type="button" data-preset="custom" aria-pressed="false">직접 입력</button>
     </div>
-    <textarea id="tester" spellcheck="false"></textarea>
-    <p class="hint">위 칸에 직접 타이핑하면 아래 미리보기에 실제 폰트로 반영됩니다.</p>
+    <p class="hint" id="selectHint" style="margin-top: 10px;">미리 준비된 문구입니다. 눌러서 바꿔보세요.</p>
   </div>
 
-  <div class="card" id="previewCard" style="margin-top: 16px;">
+  <div class="card" id="inputCard" hidden>
+    <textarea id="tester" spellcheck="false" placeholder="여기에 직접 입력해보세요…"></textarea>
+  </div>
+
+  <div class="card" id="previewCard">
+    <div class="seg" id="weightSeg" role="group" aria-label="굵기" style="margin-bottom: 14px;">
+      <button type="button" data-weight="400" aria-pressed="true">Regular</button>
+      <button type="button" data-weight="700" aria-pressed="false">Bold</button>
+    </div>
     <div class="scale-row">
       <label for="sizeRange">크기</label>
       <input type="range" id="sizeRange" min="12" max="96" step="1" value="32">
@@ -88,25 +168,31 @@
     <div id="previewBox"></div>
   </div>
 
-  <div class="card" style="margin-top: 16px;">
-    <p class="hint" style="margin-top: 0;">
-      <code>@font-face { src: url("DokkaebiDNRGothic-Regular.woff2") format("woff2"); }</code>
-    </p>
-    <p class="hint">
-      더 큰 웨이트/포맷과 업데이트 확인은
-      <a href="https://github.com/flvrdoyster/font" style="color: var(--accent);">GitHub 저장소</a>를 참고하세요.
-    </p>
-  </div>
+  <footer class="foot">
+    <div class="code-block"><code>@font-face {
+  font-family: <span class="str">"Dokkaebi DNR Gothic"</span>;
+  src: url(<span class="str">"DokkaebiDNRGothic-Regular.woff2"</span>) format(<span class="str">"woff2"</span>);
+}</code></div>
+    <p class="hint">더 많은 정보와 사용법은 <a href="https://github.com/flvrdoyster/font">GitHub 저장소</a>를 참고하세요.</p>
+  </footer>
 </div>
 
 <script>
   const textarea = document.getElementById("tester");
+  const inputCard = document.getElementById("inputCard");
   const previewBox = document.getElementById("previewBox");
+  const heroWord = document.getElementById("heroWord");
   const sizeRange = document.getElementById("sizeRange");
   const sizeLabel = document.getElementById("sizeLabel");
   const weightSeg = document.getElementById("weightSeg");
   const presetsEl = document.getElementById("presets");
+  const selectHint = document.getElementById("selectHint");
+  const localBar = document.getElementById("localBar");
   const statusEl = document.getElementById("status");
+
+  // editor_server.py는 127.0.0.1에 바인딩하고 http://localhost:PORT/ 를 안내한다
+  // -- 둘 다 로컬로 친다. 이게 이 파일에서 공개/로컬이 갈리는 유일한 지점이다.
+  const IS_LOCAL = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 
   // 프리셋 텍스트는 preview_presets.js 하나뿐 -- 여긴 그 객체를 그대로 쓴다.
   const PRESETS = PREVIEW_PRESETS;
@@ -117,11 +203,30 @@
   }
   function applyWeight(w) {
     previewBox.style.fontWeight = w;
+    heroWord.style.fontWeight = w;
     for (const btn of weightSeg.querySelectorAll("button"))
       btn.setAttribute("aria-pressed", btn.dataset.weight === String(w));
   }
-  function syncPreview() {
-    previewBox.textContent = textarea.value;
+
+  // "직접 입력"도 프리셋과 같은 탭 줄의 항목 하나다 -- 골라야 textarea가 나타나고,
+  // 그 탭에 있을 때만 입력이 미리보기에 반영된다. 다른 탭으로 옮기면 입력창은
+  // 숨을 뿐 값은 그대로 남아 있어서, 되돌아오면 쓰던 걸 이어 쓸 수 있다.
+  let activeTab = "body";
+
+  function selectTab(key) {
+    activeTab = key;
+    for (const btn of presetsEl.querySelectorAll("button"))
+      btn.setAttribute("aria-pressed", String(btn.dataset.preset === key));
+    if (key === "custom") {
+      inputCard.hidden = false;
+      selectHint.textContent = "직접 입력한 내용이 아래 미리보기에 실제 폰트로 반영됩니다.";
+      previewBox.textContent = textarea.value;
+      textarea.focus();
+    } else {
+      inputCard.hidden = true;
+      selectHint.textContent = "미리 준비된 문구입니다. 눌러서 바꿔보세요.";
+      previewBox.textContent = PRESETS[key];
+    }
   }
 
   sizeRange.addEventListener("input", () => applySize(sizeRange.value));
@@ -129,26 +234,30 @@
     const btn = e.target.closest("button[data-weight]");
     if (btn) applyWeight(btn.dataset.weight);
   });
-  textarea.addEventListener("input", syncPreview);
+  textarea.addEventListener("input", () => {
+    if (activeTab === "custom") previewBox.textContent = textarea.value;
+  });
   presetsEl.addEventListener("click", e => {
     const btn = e.target.closest("button[data-preset]");
-    if (btn) { textarea.value = PRESETS[btn.dataset.preset]; syncPreview(); }
+    if (btn) selectTab(btn.dataset.preset);
   });
 
   applySize(sizeRange.value);
   applyWeight(400);
-  textarea.value = PRESETS.body;
-  syncPreview();
+  selectTab(activeTab);
 
-  Promise.all([
-    document.fonts.load('16px "Dokkaebi DNR Gothic"'),
-    document.fonts.load('700 16px "Dokkaebi DNR Gothic"'),
-  ]).then(() => {
-    statusEl.textContent = "준비됨";
-    statusEl.dataset.on = "true";
-  }).catch(() => {
-    statusEl.textContent = "불러오기 실패";
-  });
+  if (IS_LOCAL) {
+    localBar.hidden = false;
+    Promise.all([
+      document.fonts.load('16px "Dokkaebi DNR Gothic"'),
+      document.fonts.load('700 16px "Dokkaebi DNR Gothic"'),
+    ]).then(() => {
+      statusEl.textContent = "준비됨";
+      statusEl.dataset.on = "true";
+    }).catch(() => {
+      statusEl.textContent = "불러오기 실패";
+    });
+  }
 </script>
 </body>
 </html>
