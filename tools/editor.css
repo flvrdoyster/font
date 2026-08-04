@@ -10,6 +10,17 @@
 :root {
   --ground: #eef0f4; --panel: #ffffff; --ink: #191c22; --muted: #5c6270;
   --faint: #d6dae2; --cell-off: #f7f8fb; --accent: #81a5f9; --accent-soft: #e8eefe;
+  /* Same hue/saturation as --accent (HSL 222°/91%), lightness moved to the
+     two ends that --accent and --accent-soft don't cover. --accent-dark
+     exists mainly to fix what --accent alone can't: white text on #81a5f9
+     sits at ~2.4:1 contrast (fails WCAG AA), but on --accent-dark it's
+     6.4:1 -- use it wherever accent is a solid fill with white text needing
+     to hold up (button/pill hover, etc.), not as a general "darker accent".
+     --accent-light sits between --accent and --accent-soft (which is
+     nearly white, built for large soft-fill backgrounds) -- pick it for
+     anything that needs to still read as clearly blue at a glance, just
+     dialed back from full --accent. */
+  --accent-dark: #0b4eea; --accent-light: #b1c7fb;
   --grid-line: #c8cdd7; --focus: #1668c4; --confirm: #2e8b4f; --warn: #b3392c;
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -43,14 +54,14 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
        color: var(--ink); }
 .btn:hover { border-color: var(--accent); }
 .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary { background: var(--accent-dark); color: #fff; border-color: var(--accent-dark); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn[hidden] { display: none; }
 
 .status { font-family: var(--mono); font-size: 11px; padding: 2px 8px;
           border-radius: 20px; white-space: nowrap;
           background: var(--faint); color: var(--muted); }
-.status[data-on="true"] { background: var(--accent-soft); color: var(--accent); }
+.status[data-on="true"] { background: var(--accent-soft); color: var(--accent-dark); }
 
 .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50;
           display: flex; flex-direction: column; gap: 8px; pointer-events: none; }

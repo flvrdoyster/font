@@ -65,7 +65,7 @@
                 font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer;
                 white-space: nowrap; flex: none; }
   .seg button + button { border-left: 1px solid var(--grid-line); }
-  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button[aria-pressed="true"] { background: var(--accent-dark); color: #fff; }
 
   /* Cards get a touch more room and a hairline shadow here -- this page is
      the public face, tools/*.html are dense working screens, so the two
@@ -108,7 +108,7 @@
 
   .scale-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
                font-size: 12px; color: var(--muted); }
-  .scale-row input[type="range"] { width: 160px; }
+  .scale-row input[type="range"] { width: 160px; accent-color: var(--accent-dark); }
 
   /* The one thing on the page actually styled with the webfont -- input
      above stays the page's own UI font on purpose (see the head comment),
