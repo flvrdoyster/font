@@ -65,6 +65,9 @@
   <header class="topbar">
     <h1>반각(半角)</h1>
     <span class="status" id="status"></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="buildBmp"
+      title="PC-98용 테스트 font.bmp를 다시 만듭니다 — 완성형 Light(compose_light.py)와 반각 한글(glyphs_halfwidth.json)을 최신 저장 내용으로 반영합니다. build/font_light.bmp에 씀. 편집 중인 미저장 글자는 포함되지 않습니다.">BMP</button>
   </header>
 
   <div class="layout">
@@ -382,6 +385,22 @@
     } finally {
       setTimeout(() => { btn.textContent = t; btn.disabled = false; }, 1200);
     }
+  });
+
+  document.getElementById("buildBmp").addEventListener("click", async e => {
+    const btn = e.currentTarget; const t = btn.textContent;
+    btn.disabled = true; btn.textContent = "BMP 작성 중…";
+    try {
+      const res = await fetch("api/build_bmp", { method: "POST" });
+      const j = await res.json();
+      showToast(j.ok ? "BMP 작성 완료 ✓ (build/font_light.bmp)" : "BMP 작성 실패 — 콘솔 확인",
+                j.ok ? "success" : "error");
+      if (!j.ok) console.error("[BMP]", j.log || "");
+    } catch (err) {
+      showToast("BMP 작성 실패 — 콘솔 확인", "error");
+      console.error("[BMP] 요청 실패:", err);
+    }
+    btn.disabled = false; btn.textContent = t;
   });
 
   async function connect() {
