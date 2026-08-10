@@ -87,6 +87,11 @@
                style="font: inherit; font-size: 14px; width: 44px; text-align: center;
                       border: 1px solid var(--grid-line); border-radius: 6px;
                       background: var(--panel); color: var(--ink); padding: 4px;">
+        <label class="toggle" for="refCharInput" style="margin-left: 10px;">참고</label>
+        <input id="refCharInput" maxlength="1" size="2"
+               style="font: inherit; font-size: 14px; width: 44px; text-align: center;
+                      border: 1px solid var(--grid-line); border-radius: 6px;
+                      background: var(--panel); color: var(--ink); padding: 4px;">
       </div>
       <div class="grid-outer">
         <div class="grid showgrid" id="grid"></div>
@@ -94,7 +99,7 @@
         <canvas class="ghost-ref" id="ghostLight" width="176" height="352"></canvas>
       </div>
       <div class="row">
-        <label class="toggle"><input type="checkbox" id="refToggle" checked> 참조 오버레이(파랑)</label>
+        <label class="toggle"><input type="checkbox" id="refToggle" checked> 참고 글자 오버레이(파랑)</label>
         <label class="toggle"><input type="checkbox" id="lightToggle" checked> Light 절반(빨강)</label>
       </div>
       <div class="tools">
@@ -125,9 +130,13 @@
   const curLabel = document.getElementById("curLabel");
   const ghostLight = document.getElementById("ghostLight");
   const charInput = document.getElementById("charInput");
+  const refCharInput = document.getElementById("refCharInput");
 
   let SAVED = {};   // slot -> rows[]  (tools/glyphs_halfwidth.json)
-  let REF = {};     // slot -> rows[]  (PC-98 reference, /api/halfwidth_ref)
+  let REF = {};     // slot -> rows[]  (PC-98 ROM cell layout, /api/halfwidth_ref --
+                     // slot ENUMERATION only now; the pixel content isn't a
+                     // trustworthy trace source, since it's the user's own
+                     // earlier reconstruction, not independent ROM data.)
   let CHARMAP = {}; // slot -> char    (tools/halfwidth_char_map.json)
   let lightCache = {}; // char -> rows[] (8-wide, /api/halfwidth_light_ref)
   let curSlot = "10-1";
@@ -196,11 +205,23 @@
   });
   window.addEventListener("pointerup", () => { painting = false; });
 
+  // 참고 글자로 찾은 슬롯의 SAVED 글리프를 파랑으로 보여준다 -- 기본 에디터의
+  // "참고" 필드와 같은 발상: 이미 그려둔 다른 글리프를 불러와 획 스타일을
+  // 맞춰 그리는 용도. CHARMAP에 그 글자가 배정된 슬롯 중 실제로 그려진
+  // (SAVED) 첫 번째 것을 쓴다 -- 배정만 되고 아직 안 그린 슬롯은 참고할
+  // 내용이 없으므로 건너뛴다.
+  function findRefRows(ch) {
+    if (!ch) return null;
+    for (const slot in CHARMAP) {
+      if (CHARMAP[slot] === ch && SAVED[slot]) return SAVED[slot];
+    }
+    return null;
+  }
   function drawRefGhost() {
     const ctx = ghostRef.getContext("2d");
     ctx.clearRect(0, 0, ghostRef.width, ghostRef.height);
     if (!refOn) return;
-    const rows = REF[curSlot];
+    const rows = findRefRows(refCharInput.value);
     if (!rows) return;
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--ref");
     ctx.fillStyle = ink;
@@ -212,6 +233,11 @@
   }
   document.getElementById("refToggle").addEventListener("change", e => {
     refOn = e.target.checked;
+    drawRefGhost();
+  });
+  refCharInput.addEventListener("input", () => {
+    const ch = Array.from(refCharInput.value)[0] || "";
+    refCharInput.value = ch;
     drawRefGhost();
   });
 
@@ -371,6 +397,7 @@
     }
     SAVED[curSlot] = cellsToRows();
     buildPalette();
+    drawRefGhost();   // this save may be exactly what 참고 was pointing at
   }
   document.getElementById("saveOne").addEventListener("click", async e => {
     const btn = e.currentTarget; const t = btn.textContent;
