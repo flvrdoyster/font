@@ -1,8 +1,28 @@
 .venv/
-build/*
 __pycache__/
 *.pyc
 .DS_Store
+
+# Everything under build/ is regenerable, so none of it is tracked -- the one
+# rule below already covers the whole directory. Listed here only so it's clear
+# what accumulates there and how to get each back:
+#
+#   배포 산출물 (릴리스가 올리는 것, CI가 매번 새로 만든다)
+#     DokkaebiDNRGothic-{Regular,Bold}.{ttf,otf,woff2}
+#       build_ufo.py -> fontmake -> finalize.py -> build_webfont.py
+#     DokkaebiDNRGothic-{Regular,Bold}.ufo   fontmake 입력, 위 첫 단계의 출력
+#
+#   파이프라인 중간 산출물 (다음 단계가 실제로 읽는다)
+#     light_hangul.json    compose_light.py     -> build_pc98_bmp.py 입력
+#     font_light.bmp       build_pc98_bmp.py    -> gensei-pc98 전달용
+#
+#   일회성 검수물 (필요할 때만 만들고, 쌓이면 지워도 무방)
+#     *_specimen.png       compose_components.py / kerning.py --specimen /
+#                          bold_consistency_check.py
+#     light_hangul_full.json   compose_components.py --build (쓰기 전용 --
+#                          빌드는 파일 대신 cc.compose로 메모리에서 조합한다)
+#     freq_worklist.txt    freq_worklist.py
+build/*
 
 # local-only reference material (copyrighted scans etc.) — never redistribute
 /refs/
