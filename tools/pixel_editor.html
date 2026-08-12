@@ -40,6 +40,13 @@
   .seg button { border: 0; background: var(--panel); color: var(--muted);
     font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer; }
   .seg button[aria-pressed="true"] { background: var(--accent-dark); color: #fff; }
+  /* Colour chip on the ghost toggles. Its border keeps the pale --guide2 and
+     the near-white "off" state readable on both the panel and the pressed
+     accent fill, without needing a second colour per state. */
+  .ghost-toggle { display: inline-flex; align-items: center; gap: 5px; }
+  .ghost-toggle .dot { width: 8px; height: 8px; border-radius: 2px; flex: none;
+    border: 1px solid rgba(0,0,0,0.25); }
+  .ghost-toggle[aria-pressed="false"] .dot { opacity: 0.35; }
 
   /* Canvas column is sized to the canvas (16 cells x 22px + 2px border each
      side), not to half the card -- the old 1fr 1fr left ~180px of dead space
@@ -180,7 +187,17 @@
         <input type="text" id="refCharInput" maxlength="2" value="" autocomplete="off"></label>
       <div class="seg" role="group" aria-label="보조선">
         <button id="guideBtn" aria-pressed="true">안내선</button>
-        <button id="ghostBtn" aria-pressed="true">오버레이</button>
+      </div>
+      <!-- One toggle per ghost layer, each dotted in that layer's own colour
+           so 참조/참고 (near-homographs) are told apart by sight, not by
+           reading. data-layer keys straight into GHOSTS below. -->
+      <div class="seg" role="group" aria-label="오버레이">
+        <button class="ghost-toggle" data-layer="weight" aria-pressed="true">
+          <span class="dot" style="background: var(--ink)"></span>웨이트</button>
+        <button class="ghost-toggle" data-layer="ref" aria-pressed="true">
+          <span class="dot" style="background: var(--guide)"></span>참조</button>
+        <button class="ghost-toggle" data-layer="ref2" aria-pressed="true">
+          <span class="dot" style="background: var(--guide2)"></span>참고</button>
       </div>
     </div>
     <div class="draw-split">
@@ -389,7 +406,10 @@
     } catch (e) { KS2350_CHARS = []; }
   }
   let guidesOn = true;
-  let ghostOn = true;
+  // One flag per ghost layer, keyed by the toggles' data-layer:
+  //   weight = #ghost (다른 웨이트/자모 시스템 폰트), ref = #ghostSym
+  //   (Fixedsys/PC-98), ref2 = #ghostRef2 (참고 글자).
+  const GHOSTS = { weight: true, ref: true, ref2: true };
 
   const gridEl = document.getElementById("grid");
   const guidesEl = document.getElementById("guides");
@@ -503,10 +523,15 @@
   //    Bold has no upstream weight of its own to reference.
   //  - purple (#ghostRef2, --guide2): the "참고" field's character in the
   //    CURRENT weight, so a similar already-drawn glyph can be traced against.
-  //  - blue (#ghostSym, --guide): Fixedsys Excelsior, Bold tab only, for
-  //    Latin/digits/symbols (see /api/fixedsysref). Shape reference; still
-  //    redrawn by hand, and at our own cap-height, not Fixedsys's (measured
-  //    2px shorter than ours on the same baseline row).
+  //  - blue (#ghostSym, --guide): the tab's EXTERNAL design reference, one
+  //    source per tab so the two never stack.
+  //      Bold: Fixedsys Excelsior for Latin/digits/symbols
+  //        (/api/fixedsysref) -- redrawn at our own cap-height, not
+  //        Fixedsys's (measured 2px shorter than ours on the same baseline).
+  //      Regular: the original PC-98 bitmap for FULLWIDTH alnum only
+  //        (/api/pc98ref, JIS ku 3). Temporary, for the 전각 영숫자 pass --
+  //        Regular's normal reference is Bold via #ghost above, and every
+  //        other character on this tab still gets only that.
   // 호환 자모는 참조 소스가 다르다 -- 원본 비트맵의 자모는 이 폰트가 더는 싣지
   // 않는 상속 글리프라(build_ufo.py _in_scope) 시스템 폰트를 대신 깐다.
   function isCompatJamo(ch) {
@@ -521,6 +546,12 @@
   // only): Latin, digits, punctuation, currency, math, arrows, box drawing,
   // blocks, shapes.
   function isSymRef(ch) { return !isHangul(ch); }
+  // ０-９ / Ａ-Ｚ / ａ-ｚ -- the only characters the PC-98 overlay answers for.
+  function isFullwidthAlnum(ch) {
+    const c = ch.codePointAt(0);
+    return (c >= 0xFF10 && c <= 0xFF19) || (c >= 0xFF21 && c <= 0xFF3A)
+        || (c >= 0xFF41 && c <= 0xFF5A);
+  }
   // One fetch for all three reference sources -- they differ only in URL.
   // Caches null on failure too, so a miss isn't retried on every repaint;
   // `ch in cache` (not truthiness) is what tells "already asked" from "not
@@ -543,6 +574,7 @@
   const refText = w => ch => `api/text?weight=${w}&s=` + encodeURIComponent(ch);
   const boldRef = refFetcher(refText("regular"));
   const fixedsysRef = refFetcher(ch => "api/fixedsysref?s=" + encodeURIComponent(ch));
+  const pc98Ref = refFetcher(ch => "api/pc98ref?s=" + encodeURIComponent(ch));
   const jamoRef = refFetcher(ch => "api/jamoref?s=" + encodeURIComponent(ch));
   function paintGhost(cv, rows, colorVar) {
     const px = 22;
@@ -560,11 +592,11 @@
   }
   function drawGhost() {
     let rows = null;
-    if (ghostOn && isCompatJamo(curChar) && WEIGHT !== "light") {
+    if (GHOSTS.weight && isCompatJamo(curChar) && WEIGHT !== "light") {
       // Bold 탭: 시스템 폰트(Apple SD Gothic Neo). Bold 93자가 이제 다 그려져
       // 있지만, 다시 손볼 때 여전히 참고할 독립 소스로 남겨둔다.
       rows = jamoRef(curChar);
-    } else if (ghostOn && WEIGHT === "light") {
+    } else if (GHOSTS.weight && WEIGHT === "light") {
       // Light 탭: 한글이든 라틴/숫자/기호든 전부 Bold를 얇혀 내려오는 거라,
       // 마스터인 Bold를 그대로 참조로 보여준다. 자모도 여기선 다른 한글과
       // 다를 것 없는 케이스라 시스템 폰트 특례가 필요 없다.
@@ -575,10 +607,25 @@
     drawRefGhost();
   }
   function drawSymGhost() {
-    // Bold tab only -- on Light, #ghost above already shows Bold as the
-    // reference for every character, so a second overlay here would be
-    // redundant with it instead of adding information.
-    const rows = ghostOn && WEIGHT === "regular" && isSymRef(curChar) ? fixedsysRef(curChar) : null;
+    // One external reference per tab, never both. Bold: Fixedsys for
+    // Latin/digits/symbols. Regular: the PC-98 bitmap, but ONLY for
+    // fullwidth alnum -- everything else on this tab already has Bold via
+    // #ghost, and a second overlay there would just be redundant with it.
+    // Fullwidth alnum is excluded from the Fixedsys side on purpose. Measured:
+    // Fixedsys DOES carry dedicated fullwidth glyphs for ０-９/Ａ-Ｚ (uniFF10,
+    // uniFF21, ... -- distinct outlines from the halfwidth ones, drawn 20
+    // units shorter), but their advance is still 8px, and ａ-ｚ is absent from
+    // the cmap entirely (0/26). So _face_grid seats an 8px-wide letter in the
+    // 16px fullwidth cell: it reads as a small glyph hugging the left edge,
+    // which is a misleading thing to trace a fullwidth design against.
+    // Better no overlay there than a wrong one.
+    let rows = null;
+    if (GHOSTS.ref) {
+      if (WEIGHT === "regular" && isSymRef(curChar) && !isFullwidthAlnum(curChar))
+        rows = fixedsysRef(curChar);
+      else if (WEIGHT === "light" && isFullwidthAlnum(curChar))
+        rows = pc98Ref(curChar);
+    }
     paintGhost(document.getElementById("ghostSym"), rows, "--guide");
   }
   let refChar = "";
@@ -602,7 +649,7 @@
   }
   function drawRefGhost() {
     let rows = null;
-    if (ghostOn && refChar && refChar !== curChar) {
+    if (GHOSTS.ref2 && refChar && refChar !== curChar) {
       rows = paletteSource(refChar);
       if (!rows && SERVER) rows = refCharGhostRows(refChar);
     }
@@ -783,11 +830,15 @@
     e.currentTarget.setAttribute("aria-pressed", guidesOn);
     drawGuides();
   });
-  document.getElementById("ghostBtn").addEventListener("click", e => {
-    ghostOn = !ghostOn;
-    e.currentTarget.setAttribute("aria-pressed", ghostOn);
-    drawGhost();
-  });
+  // drawGhost() repaints all three layers (it calls drawSymGhost/drawRefGhost),
+  // so one handler covers every toggle regardless of which layer it owns.
+  document.querySelectorAll(".ghost-toggle").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const layer = btn.dataset.layer;
+      GHOSTS[layer] = !GHOSTS[layer];
+      btn.setAttribute("aria-pressed", GHOSTS[layer]);
+      drawGhost();
+    }));
 
   // ---- tools ----
   let gridClipboard = null; // { w, rows: boolean[][] } -- in-memory, cross-character

@@ -13,6 +13,9 @@ kana, kanji, symbols, ...) and overwrites:
     -- each glyph is 8px wide, written left-aligned in its 16px cell with the
     remaining 8 columns cleared (matches how the ROM's own halfwidth glyphs
     are laid out)
+  - the 전각 영숫자 cells (JIS ku 3 -> col 3, see tools/pc98_fullwidth.py)
+    with our Light ０-９/Ａ-Ｚ/ａ-ｚ from tools/glyphs_light.json -- 16px wide,
+    filling the cell. Characters not drawn yet are left as the ROM had them.
 
 Everything else in the bitmap -- including kana, which now also lives in the
 완성형 block per the PC-98 kana discovery -- is left exactly as the original
@@ -26,21 +29,27 @@ Inputs:  original/pc98_font.bmp,
          tools/pc98_hangul_map.json, build/light_hangul.json
            (run scripts/compose_light.py first if stale)
          tools/pc98_halfwidth_map.json, tools/glyphs_halfwidth.json
+         tools/pc98_fullwidth.py, tools/glyphs_light.json
 Output:  build/font_light.bmp
 
 Run from the repo root:  python scripts/build_pc98_bmp.py
 """
 import json
 import os
+import sys
 
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import pc98_fullwidth as fw   # noqa: E402  (needs the path above)
+
 BMP = os.path.join(ROOT, "original", "pc98_font.bmp")
 PC98_MAP = os.path.join(ROOT, "tools", "pc98_hangul_map.json")
 LIGHT_HANGUL = os.path.join(ROOT, "build", "light_hangul.json")
 HALFWIDTH_MAP = os.path.join(ROOT, "tools", "pc98_halfwidth_map.json")
 HALFWIDTH_GLYPHS = os.path.join(ROOT, "tools", "glyphs_halfwidth.json")
+LIGHT_GLYPHS = os.path.join(ROOT, "tools", "glyphs_light.json")
 OUT = os.path.join(ROOT, "build", "font_light.bmp")
 
 
@@ -83,12 +92,33 @@ def main():
                 c = line[x] if x < len(line) and x < 8 else "."
                 im.putpixel((x0 + x, y0 + y), 0 if c == "#" else 255)
 
+    # 전각 영숫자 (ku 3): our own Light glyphs, 16px wide, filling the cell --
+    # unlike the 반각 pass above there's no left-align/clear to do.
+    with open(LIGHT_GLYPHS, encoding="utf-8") as f:
+        light = json.load(f)
+
+    fw_placed = fw_absent = 0
+    for ch in fw.chars():
+        rows = light.get(ch)
+        if not rows:
+            fw_absent += 1
+            continue
+        col, row = fw.cell_for(ch)
+        x0, y0 = col * 16, row * 16
+        for y, line in enumerate(rows):
+            for x in range(16):
+                c = line[x] if x < len(line) else "."
+                im.putpixel((x0 + x, y0 + y), 0 if c == "#" else 255)
+        fw_placed += 1
+
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     im.save(OUT)
     print(f"wrote {OUT}: {len(hangul) - missing}/{len(hangul)} 완성형 syllables placed"
           + (f", {missing} missing cell mapping" if missing else ""))
     print(f"  + {len(halfwidth) - hw_missing}/{len(halfwidth)} 반각 slots placed"
           + (f", {hw_missing} missing cell mapping" if hw_missing else ""))
+    print(f"  + {fw_placed}/{fw_placed + fw_absent} 전각 영숫자 placed"
+          + (f", {fw_absent} not drawn yet" if fw_absent else ""))
 
 
 if __name__ == "__main__":

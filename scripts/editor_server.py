@@ -37,6 +37,11 @@ API so the editor can load and SAVE glyphs, per weight (Regular / Light):
                           -> reference grids for Latin/digits/symbols, from
                              Fixedsys Excelsior (refs/FSEX302.ttf, CC0).
                              Overlay only; never embedded in built output.
+  GET  /api/pc98ref?s=..  -> reference grids for FULLWIDTH alnum (０-９/Ａ-Ｚ/
+                             ａ-ｚ) from the original PC-98 bitmap's JIS ku 3
+                             (original/pc98_font.bmp col 3). None for anything
+                             else. Regular(1px) tab only -- Bold draws its
+                             Latin from Fixedsys instead. Overlay only.
   GET  /api/cells         -> jamo-component cells for the 11,172 expansion
                              (scripts/compose_components.py): status, sample
                              counts, affected-syllable counts, and a suggested
@@ -326,6 +331,50 @@ def _pc98():
     return _PC98
 
 
+
+
+# Fullwidth alnum cells: tools/pc98_fullwidth.py, shared with
+# scripts/build_pc98_bmp.py so the cells this overlay READS are exactly the
+# ones the build WRITES. Reference overlay only here, and only on the
+# Regular(1px) tab -- the Bold side draws its Latin from Fixedsys instead.
+# Shapes are redrawn by hand, never copied, same as every other overlay.
+_FULLWIDTH = False   # False = not loaded; None = load failed; else the module
+
+
+def _fullwidth():
+    global _FULLWIDTH
+    if _FULLWIDTH is False:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import pc98_fullwidth
+            _FULLWIDTH = pc98_fullwidth
+        except Exception:
+            _FULLWIDTH = None
+    return _FULLWIDTH
+
+
+def _pc98_fullwidth_grid(ch):
+    fw = _fullwidth()
+    if fw is None:
+        return None
+    cell = fw.cell_for(ch)
+    if cell is None:
+        return None
+    try:
+        px, _ = _pc98()   # reuse the same bitmap the Hangul lookup opened
+    except Exception:
+        return None
+    col, row = cell
+    x0, y0 = col * 16, row * 16
+    return ["".join("#" if px[x0 + x, y0 + y] < 128 else "." for x in range(16))
+            for y in range(16)]
+
+
+def pc98_fullwidth_grids(s):
+    """Per-char PC-98 grids for the fullwidth-alnum overlay. None for anything
+    outside ０-９/Ａ-Ｚ/ａ-ｚ, so a stray request can't overlay an unrelated
+    ROM cell onto a glyph that has its own reference."""
+    return [{"ch": ch, "rows": _pc98_fullwidth_grid(ch)} for ch in s]
 
 
 _PC98_HALFWIDTH = None  # lazy (PIL pixel access, {"1".."94": [col, row]})
@@ -928,6 +977,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/fixedsysref":
             s = qs.get("s", [""])[0]
             return self._send(200, json.dumps({"chars": fixedsys_ref_grids(s)},
+                                              ensure_ascii=False))
+        if parsed.path == "/api/pc98ref":
+            s = qs.get("s", [""])[0]
+            return self._send(200, json.dumps({"chars": pc98_fullwidth_grids(s)},
                                               ensure_ascii=False))
         if parsed.path == "/api/jamoref":
             s = qs.get("s", [""])[0]
