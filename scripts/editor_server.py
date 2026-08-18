@@ -785,20 +785,13 @@ def _pc98_grid_or_none():
     return cl.load_pc98()
 
 
-# Latin/digit/symbol reference: Fixedsys Excelsior (kika/fixedsys, CC0),
-# an 8x16-cell descendant of the classic Windows monospace font. Measured
-# against ours (2026-08): our '@'/'*'/'"' turned out genuinely weaker (a
-# maze-like '@' instead of the classic single-loop shape, an oversized
-# 7-row '*' next to Fixedsys's compact 5-row one, a curled '"' instead of
-# straight parallel ticks) -- concrete gaps, not just a different style.
-# Fixedsys is monospace and 2px-cap-height-shorter than ours (ink rows 4-12
-# vs our 2-12 on the same row-12 baseline), and is missing 14 codepoints we
-# ship (⇐⇒⇔∏∫□▲△▼▽◆◇✓✔) -- so this is reference to redraw from at OUR
-# proportions, same as every other overlay here, never a straight import.
-# Vendored in refs/ (gitignored, CC0 so no redistribution concern, just kept
-# out of the build like the other local-only refs) rather than a
-# local-machine path like DKBDinaru was, since it's a small single file
-# fetched once rather than something already installed system-wide.
+# Latin/digit/symbol reference: Fixedsys Excelsior (kika/fixedsys, CC0), an
+# 8x16-cell descendant of the classic Windows monospace font -- a shape
+# reference to redraw from at OUR proportions (2px shorter cap-height, and
+# missing 14 codepoints we ship), never a straight import, same as every
+# other overlay here. Vendored in refs/ (gitignored, CC0 so no
+# redistribution concern) rather than a local-machine path like DKBDinaru
+# was, since it's a small single file fetched once.
 FIXEDSYS_TTF = os.path.join(ROOT, "refs", "FSEX302.ttf")
 REF_PX = 16
 # The font's own baseline sits at row 14 of its 16-row cell; ours sits at row
@@ -824,18 +817,12 @@ def _fixedsys():
 
 
 # Compat-jamo reference: Apple SD Gothic Neo, the macOS Korean system font.
-# Deliberately NOT the original bitmap, unlike every other Hangul view here.
-# The original does carry all 94 compat jamo, but those belong to the ~665
-# inherited glyphs that whoever assembled the distributed bitmap pulled in from
-# elsewhere -- they ignore this design's vertical band and are exactly what
-# build_ufo.py's _in_scope() now refuses to ship. Overlaying them would be
-# tracing the thing we just threw out.
-#
-# Picked over the alternatives on coverage: it maps all 51 modern jamo AND all
-# 42 archaic ones (ㅿ, ㆍ ...), and every one of the 93 fits the 16px cell
-# without clipping (measured). AppleGothic/Nanum/Koddi also cover them;
-# NotoSansGothic covers none. Reference only -- shapes are redrawn by hand,
-# never copied, same as every other ref here.
+# Deliberately NOT the original bitmap, unlike every other Hangul view here --
+# the original's 94 compat jamo belong to the ~665 inherited glyphs
+# build_ufo.py's _in_scope() now refuses to ship, so overlaying them would be
+# tracing the thing we just threw out. Covers all 93 jamo this font ships
+# (51 modern + 42 archaic) without clipping the 16px cell (measured). Shapes
+# are redrawn by hand, never copied, same as every other ref here.
 JAMO_REF_TTC = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 _JAMO_REF = False
 
